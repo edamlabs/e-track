@@ -1,5 +1,6 @@
 """tests/unit/etrack/providers/drivers/sink/otlp: frames as spans and logs — derived ids, nesting, dialects, closure."""
 
+import json
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -112,6 +113,25 @@ async def test_otlp_dialects(spans: InMemorySpanExporter) -> None:
     assert attributes["input.value"] == '[{"role":"human","content":"hi"}]'
     assert attributes["output.value"] == '{"text":"hola"}'
     assert llm.status.status_code is StatusCode.OK
+
+
+async def test_otlp_usage_buckets(spans: InMemorySpanExporter) -> None:
+    ### the source's totals include the cached input and the reasoning output: Langfuse prices each bucket apart.
+    usage = Usage(input_tokens=2494, output_tokens=129, total_tokens=2623, reasoning_tokens=87, cache_read_tokens=1752)
+    async with OtlpDriver(span_exporters=[spans]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=ROOT, kind=EventKind.LLM, name="gemini"))
+        await driver.send(frame(1, EventPhase.END, id=ROOT, kind=EventKind.LLM, name="gemini", usage=usage))
+    (span,) = spans.get_finished_spans()
+    attributes = dict(span.attributes or {})
+    assert json.loads(str(attributes["langfuse.observation.usage_details"])) == {
+        "input": 742,
+        "output": 42,
+        "input_cache_read": 1752,
+        "output_reasoning": 87,
+    }
+    assert attributes["gen_ai.usage.cache_read.input_tokens"] == 1752
+    assert attributes["gen_ai.usage.reasoning.output_tokens"] == 87
+    assert attributes["gen_ai.usage.input_tokens"] == 2494
 
 
 async def test_otlp_error_status(spans: InMemorySpanExporter) -> None:
