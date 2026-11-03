@@ -4,6 +4,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- `AnyioAdapter` no longer ties its task group to the task that opened it: a supervisor task owns the group, so the bus
+  can be entered and left by different tasks (async-generator fixtures, split lifespans) without anyio's "exit cancel
+  scope in a different task". `subscribe` after open is now safe from a foreign thread (hops onto the loop).
+
 ## [0.1.0] — 2026-11-03
 
 ### Added
