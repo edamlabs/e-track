@@ -18,7 +18,7 @@ export PYTHONPATH := $(CURDIR)/src
 UI      := src/etrack/ui
 
 ##### TARGETS #####
-.PHONY: help install sync lock lint type arch validate harden hooks test integration cov docs docs-build ui ui-check ui-types build check ci clean
+.PHONY: help install sync lock lint type arch validate harden hooks test integration cov docs docs-serve ui ui-check ui-types build check ci clean
 
 help:
 	@printf "$(BOLD)$(CYAN)$(PROJECT)$(RESET) $(GRAY)· uv · ruff · ty · tach · pytest · zensical — run tracking for agent systems$(RESET)\n\n"
@@ -68,11 +68,11 @@ cov: ## run tests with coverage gate (fail under 100%), benchmarks out like the 
 	@uv run pytest tests $(TESTARGS) --cov --cov-report=term-missing
 
 # — docs —
-docs: ## serve docs site live at :8000
-	@uv run zensical serve
+docs: ## strict docs build to site/ — fails on broken links or missing assets (the fleet's docs module runs this)
+	@uv run zensical build --strict --clean
 
-docs-build: ## strict docs build to site/
-	@uv run zensical build --strict
+docs-serve: ## serve the docs site live at 127.0.0.1:8000
+	@uv run zensical serve -a 127.0.0.1:8000
 
 # — canvas —
 ui: ## build the viewer's canvas into src/etrack/ui/dist — the static page the viewer serves at /
@@ -94,7 +94,7 @@ build: ui ## canvas, then sdist + wheel into dist/, then import the wheel in a c
 
 # — aggregate —
 check: lint type arch validate test ## fast local gate: lint + type + arch + validate + test
-ci: lint type arch validate harden ui-check docs-build cov integration build ## full pipeline: every gate CI runs, in one command
+ci: lint type arch validate harden ui-check docs cov integration build ## full pipeline: every gate CI runs, in one command
 
 clean: ## remove caches + build artifacts
 	@find . -type d \( -name __pycache__ -o -name .pytest_cache -o -name .ruff_cache \) -exec rm -rf {} + 2>/dev/null || true
