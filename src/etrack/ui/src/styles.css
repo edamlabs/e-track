@@ -7,7 +7,11 @@
   --teal: #166b7e;
   --run: #2fb4c9;
   --done: #3f9d6b;
-  --fail: #d1495b;
+  --fail: #e66767;
+  /* kind families: the dark steps of the categorical palette, validated together on --panel (every pair, CVD too) */
+  --fam-model: #3987e5;
+  --fam-action: #d95926;
+  --fam-delegation: #199e70;
   font:
     13px / 1.4 ui-sans-serif,
     system-ui,
@@ -225,4 +229,143 @@ main {
 .status.error,
 pre.error {
   color: var(--fail);
+}
+
+/* ── kind families: a stripe and the kind's own colour; the kind is always written beside it ── */
+.fam-model {
+  --fam: var(--fam-model);
+}
+.fam-action {
+  --fam: var(--fam-action);
+}
+.fam-delegation {
+  --fam: var(--fam-delegation);
+}
+.fam-neutral {
+  --fam: var(--dim);
+}
+.call {
+  border-left: 4px solid var(--fam);
+}
+.call .kind,
+.row .kind,
+.detail h3 .kind {
+  color: var(--fam);
+}
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.swatch::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--fam);
+}
+.legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-left: 12px;
+}
+.legend .states {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+/* ── status is a shape: ◌ running (pulsing), ✓ done, ✕ error; red only for an error ── */
+.glyph {
+  width: 12px;
+  flex: none;
+  text-align: center;
+  color: var(--dim);
+}
+.glyph.running {
+  color: var(--ink);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.glyph.error {
+  color: var(--fail);
+  font-weight: 700;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.stage.running {
+  border-color: var(--ink);
+  box-shadow: 0 0 12px rgba(216, 226, 234, 0.35);
+}
+.stage.done,
+.call.done {
+  border-color: var(--line);
+}
+.stage.done {
+  border-color: var(--teal);
+}
+.stage.error,
+.call.error {
+  border-color: var(--fail);
+  box-shadow: none;
+}
+.call.done {
+  border-top-color: var(--line);
+  border-right-color: var(--line);
+  border-bottom-color: var(--line);
+}
+.stage.selected,
+.call.selected {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.stage {
+  cursor: pointer;
+  align-items: center;
+}
+.stage .text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.stage .name {
+  color: var(--dim);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+.call {
+  cursor: pointer;
+}
+
+/* ── the node card ── */
+.detail dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.detail dt {
+  color: var(--dim);
+}
+.detail dd {
+  margin: 0;
+}
+.detail .row {
+  padding-left: 0;
+}
+.muted,
+.hint {
+  color: var(--dim);
+  font-size: 12px;
+}
+.hint {
+  padding: 12px 16px;
 }

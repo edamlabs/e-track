@@ -8,10 +8,11 @@ then by id, so a layout is deterministic and arcs cross as little as one pass al
 from statistics import fmean
 from typing import TYPE_CHECKING, Final
 
+import msgspec
 import rustworkx as rx
 
 from etrack.infra.errors import LayoutError
-from etrack.ports.topology import Topology, TopologyEdge, TopologyNode
+from etrack.ports.topology import Topology
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -72,26 +73,13 @@ class LayoutProcessor:
         dag = digraph.copy()
         dag.remove_edges_from(list(visitor.found))
         grid = self._place_lanes(dag, rx.topological_generations(dag))
+        ### replace, never rebuild: whatever a node or an arc carries beyond its place (a label…) survives the layout.
         nodes = tuple(
-            TopologyNode(
-                id=node.id,
-                name=node.name,
-                entry=node.entry,
-                exit=node.exit,
-                rank=grid[index[node.id]][0],
-                lane=grid[index[node.id]][1],
-            )
+            msgspec.structs.replace(node, rank=grid[index[node.id]][0], lane=grid[index[node.id]][1])
             for node in topology.nodes
         )
         edges = tuple(
-            TopologyEdge(
-                id=edge.id,
-                source=edge.source,
-                target=edge.target,
-                conditional=edge.conditional,
-                label=edge.label,
-                loop=(index[edge.source], index[edge.target]) in visitor.found,
-            )
+            msgspec.structs.replace(edge, loop=(index[edge.source], index[edge.target]) in visitor.found)
             for edge in topology.edges
         )
         return Topology(

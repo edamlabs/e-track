@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { Topology } from "./contract";
+import { type Family, family } from "./kinds";
 import { hostNode, outer, type Span, type Status } from "./spans";
 
 export const LANE_GAP = 280;
@@ -10,7 +11,8 @@ const CHILDREN = 6;
 const LIVE_KINDS = new Set(["llm", "tool", "mcp", "subagent", "retrieval", "interrupt"]);
 
 export interface StageData extends Record<string, unknown> {
-  label: string;
+  name: string;
+  title: string;
   status: Status | "idle";
   visits: number;
   edge: "entry" | "exit" | "";
@@ -18,9 +20,15 @@ export interface StageData extends Record<string, unknown> {
 
 export interface CallData extends Record<string, unknown> {
   kind: string;
+  family: Family;
   label: string;
   status: Status;
   span: string;
+}
+
+// What a person reads for a node: its declared or given label, else its name.
+export function titleOf(topology: Topology, name: string): string {
+  return topology.nodes.find((node) => node.name === name)?.label || name;
 }
 
 // The declared graph on the server's grid (rank, lane), each node lit by the newest span of its name.
@@ -40,7 +48,8 @@ export function stages(topology: Topology, spans: Map<string, Span>): Node<Stage
       type: "stage",
       position: { x: ((node.lane ?? 0) - ((widths.get(rank) ?? 1) - 1) / 2) * LANE_GAP, y: rank * RANK_GAP },
       data: {
-        label: node.name,
+        name: node.name,
+        title: node.label || node.name,
         status: newest?.status ?? "idle",
         visits: mine.length,
         edge: node.entry ? "entry" : node.exit ? "exit" : "",
@@ -66,7 +75,7 @@ export function calls(
   stageNodes: Node<StageData>[],
   spans: Map<string, Span>,
 ): { nodes: Node<CallData>[]; edges: Edge[] } {
-  const byName = new Map(stageNodes.map((node) => [node.data.label, node]));
+  const byName = new Map(stageNodes.map((node) => [node.data.name, node]));
   const grouped = new Map<string, Span[]>();
   for (const span of spans.values()) {
     if (!LIVE_KINDS.has(span.kind)) continue;
@@ -89,7 +98,7 @@ export function calls(
           x: stage.position.x + CHILD_SHIFT,
           y: stage.position.y + (index - (shown.length - 1) / 2) * CHILD_GAP,
         },
-        data: { kind: span.kind, label: span.name, status: span.status, span: span.id },
+        data: { kind: span.kind, family: family(span.kind), label: span.name, status: span.status, span: span.id },
       });
       edges.push({ id: `wire:${span.id}`, source: stageId, target: id, className: "wire", sourceHandle: "side" });
     });

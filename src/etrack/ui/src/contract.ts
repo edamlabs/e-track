@@ -49,7 +49,8 @@ export interface Topology {
   lanes?: number;
 }
 /**
- * One declared node: its id, the name a span carries when it runs, and its place once laid out.
+ * One declared node: its id, the name a span carries when it runs, the label a person reads, its place once laid
+ * out. `name` ties the node to its spans and never changes; `label` is display only — empty, the name is shown.
  *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "TopologyNode".
@@ -57,6 +58,7 @@ export interface Topology {
 export interface TopologyNode {
   id: string;
   name: string;
+  label?: string;
   entry?: boolean;
   exit?: boolean;
   rank?: number;

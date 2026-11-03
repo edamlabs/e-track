@@ -13,6 +13,13 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - `LiveAdapter.threads()`: the kept threads, newest first, with their runs. `WatchPort`, `LiveFrame`, `LiveSummary`
   and `ServerPort` join the ports.
 - `LanggraphTopologyAdapter.read` takes the JSON of LangChain's `Graph.to_json()` as well as a compiled graph.
+- Labels: `TopologyNode.label`, the name people read on the canvas — declared with the node
+  (`add_node(..., metadata={"label": …})`) or given by the host (`Viewer(labels={node_id: label})`); the node's `name`,
+  which its spans carry, is untouched.
+- Viewer: clicking any node of the graph opens its card — role, name, the arcs in and out (routers and loops marked),
+  every visit of the run and the calls it made, each one clicked open. Kinds are coloured by family (model, action,
+  delegation — three hues, validated together for colour-blind readers), and the kind is always written beside its
+  colour; status is a glyph (◌ ✓ ✕), never a kind's hue. A legend in the top bar.
 - `LanggraphSourceAdapter` lifts the run's metadata under `app.` (agent versions, tenant…) onto the root span's
   `attributes`: every sink sees the run's own facts — OTLP exports them as span attributes.
 
@@ -21,7 +28,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - Bus: `health()` is false once the supervisor ends, and a supervisor that fails before opening raises instead of
   hanging `__aenter__` (its streams closed).
 
-- Viewer: the canvas refits as it grows — the calls a run makes no longer fall outside the first frame.
+- Viewer: the canvas refits as it grows, once its nodes are measured — the calls a run makes no longer fall outside the
+  first frame, nor does the first fit land off-centre.
 
 ### Changed
 
