@@ -120,6 +120,15 @@ async def test_langgraph_plain_run() -> None:
     assert [event.seq for event in emitted] == list(range(len(emitted)))
 
 
+async def test_langgraph_lifts_app_metadata() -> None:
+    emitted, config = bound(LanggraphSourceAdapter(), {"metadata": {"app.agents": {"insurance": "v1"}, "other": 1}})
+    await agent_graph(script("hola")).ainvoke({"messages": [("user", "hi")]}, config)
+    root, node = emitted[0], by(emitted, EventKind.NODE, EventPhase.START)[0]
+    assert root.attributes == {"app.agents": {"insurance": "v1"}}
+    assert node.attributes == {}
+    assert by(emitted, EventKind.RUN, EventPhase.END)[0].attributes == {"app.agents": {"insurance": "v1"}}
+
+
 async def test_langgraph_text_deltas() -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     await agent_graph(script("hola mundo")).ainvoke({"messages": [("user", "hi")]}, config, stream_mode="messages")
