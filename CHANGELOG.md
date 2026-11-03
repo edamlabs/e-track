@@ -6,13 +6,6 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ### Added
 
-- Viewer (`e-track[viewer]`, TODO_viewer): the declared graph and every thread's span tree, live. `Viewer(watch,
-  topology)` places the graph and builds an ASGI app — `/api/topology`, `/api/threads`, `/api/threads/{thread}/events`
-  (Server-Sent Events, resumed by `Last-Event-ID`), OpenAPI, and a React Flow canvas shipped in the wheel —
-  mountable in a host or served by `GranianAdapter`, granian's embedded server inside the host's loop.
-- `LiveAdapter.threads()`: the kept threads, newest first, with their runs. `WatchPort`, `LiveFrame`, `LiveSummary`
-  and `ServerPort` join the ports.
-- `LanggraphTopologyAdapter.read` takes the JSON of LangChain's `Graph.to_json()` as well as a compiled graph.
 - Labels: `TopologyNode.label`, the name people read on the canvas — declared with the node
   (`add_node(..., metadata={"label": …})`) or given by the host (`Viewer(labels={node_id: label})`); the node's `name`,
   which its spans carry, is untouched.
@@ -20,6 +13,32 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   every visit of the run and the calls it made, each one clicked open. Kinds are coloured by family (model, action,
   delegation — three hues, validated together for colour-blind readers), and the kind is always written beside its
   colour; status is a glyph (◌ ✓ ✕), never a kind's hue. A legend in the top bar.
+- An end-to-end test of the viewer: a deep agent watched through granian on a real port — topology with labels, the
+  thread list, one SSE stream replaying a run and following the next, every offset once and in order.
+
+### Fixed
+
+- Viewer: the canvas refits as it grows, once its nodes are measured — the calls a run makes no longer fall outside the
+  first frame, nor does the first fit land off-centre.
+- Layout keeps whatever a node or an arc carries beyond its place (it rebuilt them field by field).
+
+### Changed
+
+- Documentation rewritten (TODO_docs): what e-track is for and how to use it — introduction, installation, a
+  three-step quickstart, and a guide (the record, tracking runs, sinks, backends, viewer, logging, settings), every
+  example run for real with its output; the README follows.
+
+## [0.1.3] — 2026-11-03
+
+### Added
+
+- Viewer (`e-track[viewer]`, TODO_viewer): the declared graph and every thread's span tree, live. `Viewer(watch,
+  topology)` places the graph and builds an ASGI app — `/api/topology`, `/api/threads`, `/api/threads/{thread}/events`
+  (Server-Sent Events, resumed by `Last-Event-ID`), OpenAPI, and a React Flow canvas shipped in the wheel —
+  mountable in a host or served by `GranianAdapter`, granian's embedded server inside the host's loop.
+- `LiveAdapter.threads()`: the kept threads, newest first, with their runs. `WatchPort`, `LiveFrame`, `LiveSummary`
+  and `ServerPort` join the ports.
+- `LanggraphTopologyAdapter.read` takes the JSON of LangChain's `Graph.to_json()` as well as a compiled graph.
 - `LanggraphSourceAdapter` lifts the run's metadata under `app.` (agent versions, tenant…) onto the root span's
   `attributes`: every sink sees the run's own facts — OTLP exports them as span attributes.
 
@@ -28,15 +47,9 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - Bus: `health()` is false once the supervisor ends, and a supervisor that fails before opening raises instead of
   hanging `__aenter__` (its streams closed).
 
-- Viewer: the canvas refits as it grows, once its nodes are measured — the calls a run makes no longer fall outside the
-  first frame, nor does the first fit land off-centre.
-
 ### Changed
 
 - The integration sandbox moves to `tests/sandbox/`, a test resource beside the fixtures that bring it up.
-- Documentation rewritten (TODO_docs): what e-track is for and how to use it — introduction, installation, a
-  three-step quickstart, and a guide (the record, tracking runs, sinks, backends, viewer, logging, settings), every
-  example run for real with its output; the README follows.
 
 ## [0.1.2] — 2026-11-03
 
