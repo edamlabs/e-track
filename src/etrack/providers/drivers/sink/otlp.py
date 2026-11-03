@@ -262,6 +262,31 @@ class OtlpDriver:
                 return tracer
 
     @classmethod
+    def _send_usage(cls, usage: Usage | None) -> dict[str, Primitive]:
+        """Usage as mutually exclusive buckets — cached input and reasoning output apart, each priced on its own — and the
+        GenAI detail counters; the source's input and output totals include those parts, so they are taken out."""
+        match usage:
+            case None:
+                return {}
+            case _:
+                cached = usage.cache_read_tokens + usage.cache_write_tokens
+                buckets = {
+                    "input": max(usage.input_tokens - cached, 0),
+                    "output": max(usage.output_tokens - usage.reasoning_tokens, 0),
+                    "input_cache_read": usage.cache_read_tokens,
+                    "input_cache_creation": usage.cache_write_tokens,
+                    "output_reasoning": usage.reasoning_tokens,
+                }
+                return {
+                    "langfuse.observation.usage_details": cls._common_flat(
+                        {key: value for key, value in buckets.items() if value or key in {"input", "output"}}
+                    ),
+                    "gen_ai.usage.cache_read.input_tokens": usage.cache_read_tokens,
+                    "gen_ai.usage.cache_creation.input_tokens": usage.cache_write_tokens,
+                    "gen_ai.usage.reasoning.output_tokens": usage.reasoning_tokens,
+                }
+
+    @classmethod
     def _send_attributes(cls, view: OtlpView) -> dict[str, Primitive]:
         """The span's attributes in the three dialects, from what the frame carries."""
         model, usage = view.model or ModelRef(), view.usage
@@ -298,6 +323,7 @@ class OtlpDriver:
         return {
             **{key: value for key, value in named.items() if value},
             **{key: value for key, value in measured.items() if value is not None},
+            **cls._send_usage(usage),
             **params,
             **extra,
         }
