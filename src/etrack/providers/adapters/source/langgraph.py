@@ -52,6 +52,8 @@ PIECES: Final[Mapping[str, str]] = MappingProxyType(
     {"text": "text", "reasoning": "reasoning", "tool_call_chunk": "args", "tool_call": "args"}
 )
 WORDS: Final[frozenset[str]] = frozenset({"text", "reasoning"})
+### the host's namespace in a run's metadata: lifted onto the root span, so every backend sees the run's own facts.
+LIFTED: Final[str] = "app."
 PARAMS: Final[tuple[str, ...]] = ("ls_temperature", "ls_max_tokens", "ls_model_type")
 
 
@@ -90,6 +92,11 @@ class LanggraphHandler(BaseCallbackHandler):
             str(meta.get("checkpoint_ns", "")),
             step if isinstance(step, int) else None,
         )
+
+    @staticmethod
+    def _common_lift(metadata: dict[str, Any] | None) -> dict[str, Any]:
+        """The run's own facts the host put in its metadata under `app.` (versions, tenant…): the root span carries them."""
+        return {key: value for key, value in (metadata or {}).items() if key.startswith(LIFTED)}
 
     def _common_open(
         self,
@@ -225,7 +232,10 @@ class LanggraphHandler(BaseCallbackHandler):
         is_node = (metadata or {}).get("langgraph_node") == name and not nested
         match (parent_run_id, is_node):
             case (None, _):
-                self._common_open(run_id, None, EventKind.RUN, name, metadata, payload={"input": inputs})
+                attributes = self._common_lift(metadata)
+                self._common_open(
+                    run_id, None, EventKind.RUN, name, metadata, payload={"input": inputs}, attributes=attributes
+                )
             case (_, True):
                 self._common_open(run_id, parent_run_id, EventKind.NODE, name, metadata)
             case _:

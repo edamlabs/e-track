@@ -4,6 +4,11 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `LanggraphSourceAdapter` lifts the run's metadata under `app.` (agent versions, tenant…) onto the root span's
+  `attributes`: every sink sees the run's own facts — OTLP exports them as span attributes.
+
 ## [0.1.2] — 2026-11-03
 
 ### Fixed
