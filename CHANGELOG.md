@@ -21,6 +21,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - Viewer: the canvas refits as it grows, once its nodes are measured — the calls a run makes no longer fall outside the
   first frame, nor does the first fit land off-centre.
 - Layout keeps whatever a node or an arc carries beyond its place (it rebuilt them field by field).
+- `make docs` is the strict build, as the fleet's docs module expects (it was the live server, which never ends: the
+  fleet run timed out and never reached its release); `make docs-serve` serves.
 
 ### Changed
 
