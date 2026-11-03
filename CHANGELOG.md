@@ -4,6 +4,15 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-11-03
+
+### Fixed
+
+- `OtlpDriver` exports usage as mutually exclusive buckets (`langfuse.observation.usage_details`: input and output
+  without their cached and reasoning parts, `input_cache_read`, `input_cache_creation`, `output_reasoning`) and the
+  GenAI detail counters. Before, Langfuse priced cached input at the full input rate: measured on deeptrack's tracing
+  A/B, up to 2× the native handler's cost on the same tokens.
+
 ## [0.1.1] — 2026-11-03
 
 ### Fixed
@@ -11,10 +20,6 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - `AnyioAdapter` no longer ties its task group to the task that opened it: a supervisor task owns the group, so the bus
   can be entered and left by different tasks (async-generator fixtures, split lifespans) without anyio's "exit cancel
   scope in a different task". `subscribe` after open is now safe from a foreign thread (hops onto the loop).
-- `OtlpDriver` exports usage as mutually exclusive buckets (`langfuse.observation.usage_details`: input and output
-  without their cached and reasoning parts, `input_cache_read`, `input_cache_creation`, `output_reasoning`) and the
-  GenAI detail counters. Before, Langfuse priced cached input at the full input rate: measured on deeptrack's tracing
-  A/B, up to 2× the native handler's cost on the same tokens.
 
 ## [0.1.0] — 2026-11-03
 
