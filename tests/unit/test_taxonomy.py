@@ -34,7 +34,7 @@ FRAMEWORKS: Final[dict[str, frozenset[str]]] = {
     "langgraph": frozenset({"providers/adapters/source/langgraph.py", "providers/adapters/topology/langgraph.py"}),
     "opentelemetry": frozenset({"providers/drivers/sink/otlp.py"}),
     "rustworkx": frozenset({"processors/layout.py"}),
-    "eserde": frozenset({"providers/drivers/sink/otlp.py"}),
+    "eserde": frozenset({"providers/drivers/sink/otlp.py", "api/viewer.py"}),
     "litestar": frozenset({"api/viewer.py"}),
     "granian": frozenset({"providers/adapters/server/granian.py"}),
 }

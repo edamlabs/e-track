@@ -126,3 +126,42 @@ topology = LayoutProcessor().place(LanggraphTopologyAdapter().read(graph))   # r
 
 O(V + E) for loops and ranks, O(V log V) for lanes (rustworkx): back edges close cycles, topological generations are
 the ranks, a barycenter pass orders each rank.
+
+## `Viewer`
+
+The live canvas of a system: its declared graph laid out, and every thread the live sink keeps — picked from a
+dropdown, followed as it runs. Declared nodes light up while their spans run (done, error), the calls each node makes
+(model, tools, MCP, subagents) appear beside it, and the side panel shows the span tree with every span's input,
+output, deltas, latency and tokens. Install `e-track[viewer]`.
+
+```python
+from etrack.logic.viewer import Viewer
+from etrack.providers.adapters.server.granian import GranianAdapter
+from etrack.providers.adapters.topology.langgraph import LanggraphTopologyAdapter
+
+topology = LanggraphTopologyAdapter().read(graph)          # a compiled graph, or the JSON of Graph.to_json()
+viewer = Viewer(watch=live, topology=topology)             # live: the LiveAdapter subscribed to the bus
+
+# a) on its own port, in the host's own process (granian's embedded server, in the host's loop):
+async with GranianAdapter(viewer.app) as server:           # server.url → http://127.0.0.1:28130
+    ...
+
+# b) or mounted in the host's ASGI app — Litestar:
+Litestar(route_handlers=[..., asgi("/etrack", is_mount=True)(viewer.app)])
+```
+
+| Door | What |
+|---|---|
+| `GET /` | the canvas (`?thread=` preselects a thread) |
+| `GET /api/topology` | the declared graph with rank, lane and loop marks |
+| `GET /api/threads` | the kept threads, the most recently written first: offset, runs, last frame |
+| `GET /api/threads/{thread}/events` | Server-Sent Events: `id` = the thread offset, `data` = the RunEvent; resumes from `?after=` or `Last-Event-ID` |
+| `GET /api/schema` | OpenAPI |
+
+| setting | default | |
+|---|---|---|
+| `ETRACK_SERVER_HOST` | `127.0.0.1` | loopback by default: frames carry prompts and tool outputs |
+| `ETRACK_SERVER_PORT` | `28130` | |
+| `ETRACK_SERVER_BOOT` | `10s` | how long opening waits for the socket to answer |
+
+The viewer reads one process's live sink: with several replicas, each viewer sees its own.

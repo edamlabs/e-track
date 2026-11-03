@@ -7,7 +7,8 @@
   "enabledManagers": [
     "github-actions",
     "pep621",
-    "docker-compose"
+    "docker-compose",
+    "npm"
   ],
   "schedule": [
     "before 6am on monday"
@@ -55,6 +56,17 @@
       "schedule": [
         "before 6am on the first day of the month"
       ],
+      "labels": [
+        "tooling"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "The canvas's npm dependencies (React, React Flow, Vite, biome): one weekly PR, merges itself once the canvas gate passes.",
+      "matchManagers": [
+        "npm"
+      ],
+      "groupName": "canvas",
       "labels": [
         "tooling"
       ],

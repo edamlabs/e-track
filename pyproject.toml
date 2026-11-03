@@ -44,7 +44,7 @@ otel = ["opentelemetry-sdk>=1.44", "opentelemetry-exporter-otlp-proto-http>=1.44
 ##### topology layout — Rust-backed graph algorithms #####
 topology = ["rustworkx>=0.17"]
 ##### viewer — the live canvas: Litestar on granian's embedded server, the layout included #####
-viewer = ["litestar>=2.25", "granian>=2.8.5", "e-track[topology]"]
+viewer = ["litestar>=2.25", "granian>=2.8.5", "e-serde>=0.6.4", "e-track[topology]"]
 all = ["e-track[langgraph,otel,topology,viewer]"]
 
 [project.urls]
@@ -98,8 +98,8 @@ required-version = ">=0.12"
 default-groups = ["dev"]
 ### a rolling freshness window: a release enters the lock once it has lived a week; Renovate moves it on schedule.
 exclude-newer = "7 days"
-### e-serde is first-party (the house JSON encoder): it enters within the hour, like in e-serde's own lock.
-exclude-newer-package = { e-serde = "1 hour" }
+### e-serde is first-party (the house encoder, released by us): exempt from the window, a fix lands the day it ships.
+exclude-newer-package = { e-serde = false }
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 ##### VERSION #####
@@ -114,9 +114,22 @@ fallback-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/etrack"]
+### the canvas is part of the package: its built bundle ships (gitignored, so declared), its sources never do.
+artifacts = ["src/etrack/ui/dist"]
+exclude = [
+    "src/etrack/ui/src",
+    "src/etrack/ui/node_modules",
+    "src/etrack/ui/*.json",
+    "src/etrack/ui/*.ts",
+    "src/etrack/ui/*.yaml",
+    "src/etrack/ui/index.html",
+    "src/etrack/ui/tsconfig.tsbuildinfo",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/", "tests/"]
+### the wheel is built from the sdist: the bundle travels in it, and an sdist install still has the canvas.
+artifacts = ["src/etrack/ui/dist"]
 
 ##### LINT #####
 [tool.ruff]
@@ -164,7 +177,7 @@ ban-relative-imports = "all"
 "langchain_core".msg = "only providers/adapters/source/langgraph speaks LangChain"
 "langgraph".msg = "only providers/adapters/{source,topology}/langgraph speak LangGraph"
 "opentelemetry".msg = "only providers/drivers/sink/otlp speaks OpenTelemetry"
-"eserde".msg = "serialization belongs to the sink that serializes: only providers/drivers/sink/otlp encodes"
+"eserde".msg = "serialization belongs to what serializes: only providers/drivers/sink/otlp and etrack/api encode"
 "rustworkx".msg = "only processors/layout speaks rustworkx"
 "litestar".msg = "only etrack/api speaks Litestar"
 "granian".msg = "only providers/adapters/server/granian speaks granian"
@@ -196,7 +209,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "slow: slow tests (deselect with -m 'not slow')",
-    "integration: real services — the session fixtures bring sandbox/compose.yml up and down (`make integration`, needs docker)",
+    "integration: real services — the session fixtures bring tests/sandbox/compose.yml up and down (`make integration`, needs docker)",
 ]
 
 ##### COVERAGE #####

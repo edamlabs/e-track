@@ -2,7 +2,8 @@
 
 `GET /api/topology` is the declared graph as placed; `GET /api/threads` the threads the watched sink keeps, the most
 recently written first; `GET /api/threads/{thread}/events` a thread over Server-Sent Events — each message's `id` is
-the frame's offset in the thread and its `data` the RunEvent as JSON, replayed past the cursor then followed live. The
+the frame's offset in the thread and its `data` the RunEvent as JSON — e-serde canonicalizes what a source carried
+(LangChain messages, dataclasses, dates), unknown objects as their text — replayed past the cursor then followed live. The
 cursor is `?after=` or, on a browser's automatic reconnect, the `Last-Event-ID` header: a reconnect misses nothing
 still kept. `/` serves the canvas from `etrack/ui/dist` when the bundle is there; without it the API runs alone. The
 app is plain ASGI: a host mounts it under any prefix, or GranianAdapter serves it on its own port."""
@@ -11,6 +12,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any, Final
 
+import eserde
 import msgspec
 from litestar import Litestar, get
 from litestar.openapi import OpenAPIConfig
@@ -19,11 +21,14 @@ from litestar.response import ServerSentEvent
 from litestar.response.sse import ServerSentEventMessage
 from litestar.static_files import create_static_files_router
 
+from etrack.models.event import RunEvent
 from etrack.ports.sink import LiveFrame, LiveSummary, WatchPort
 from etrack.ports.topology import Topology
 
 DIST: Final[Path] = Path(__file__).resolve().parents[1] / "ui" / "dist"
 FRAME: Final[str] = "frame"
+### what crosses the wire: the canvas's TypeScript types are generated from these, never written by hand.
+CONTRACT: Final[tuple[type, ...]] = (Topology, LiveSummary, RunEvent)
 
 
 class ViewerApi:
@@ -56,7 +61,9 @@ class ViewerApi:
     async def _events_stream(frames: AsyncIterator[LiveFrame]) -> AsyncGenerator[ServerSentEventMessage]:
         ### a stream is a loop by nature, alive as long as the browser listens.
         async for frame in frames:
-            yield ServerSentEventMessage(data=msgspec.json.encode(frame.event).decode(), id=frame.offset, event=FRAME)
+            yield ServerSentEventMessage(
+                data=eserde.dumps(frame.event, default=str).decode(), id=frame.offset, event=FRAME
+            )
 
     async def _asgi_topology(self) -> Topology:
         """The declared graph, every node on its rank and lane, the arcs that close a loop marked."""
@@ -86,6 +93,12 @@ class ViewerApi:
     ############################################################
 
     ##### PUBLIC #####
+
+    @staticmethod
+    def schema() -> dict[str, Any]:
+        """The JSON Schema of every type the API sends, as `$defs`: the source of the canvas's types."""
+        _, components = msgspec.json.schema_components(CONTRACT)
+        return {"title": "Contract", "type": "object", "$defs": components}
 
     @property
     def asgi(self) -> Litestar:

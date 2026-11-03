@@ -3,15 +3,17 @@
 The SSE tests run against a real granian server on a free localhost port: an in-memory ASGI transport buffers the
 whole response, and a stream never ends."""
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import anyio
 import httpx
 import msgspec
 import pytest
+from langchain_core.messages import AIMessage
 from litestar.testing import AsyncTestClient
 
-from etrack.api.viewer import ViewerApi
+from etrack.api.viewer import DIST, ViewerApi
 from etrack.infra.config.providers.adapters.server.granian import GranianSettings
 from etrack.ports.topology import Topology, TopologyEdge, TopologyNode
 from etrack.providers.adapters.server.granian import GranianAdapter
@@ -115,6 +117,24 @@ async def test_viewer_api_events_follow() -> None:
     assert [message["id"] for message in first + second] == ["0", "1"]
 
 
+async def test_viewer_api_events_foreign_payload() -> None:
+    ### a LangChain message in a payload is what a real run carries: the stream encodes it, never dies on it.
+    live = LiveAdapter()
+    await live.send(
+        frame(0, thread_id="t1", payload={"output": AIMessage("hola"), "at": datetime(2026, 11, 3, tzinfo=UTC)})
+    )
+    await live.send(frame(1, thread_id="t1"))
+    settings = GranianSettings(port=free_port())
+    async with (
+        GranianAdapter(ViewerApi(TOPOLOGY, live).asgi, settings) as server,
+        httpx.AsyncClient(base_url=server.url) as client,
+        client.stream("GET", "/api/threads/t1/events") as reply,
+    ):
+        got = await messages(reply.aiter_lines(), 2)
+    assert [message["id"] for message in got] == ["0", "1"]
+    assert msgspec.json.decode(got[0]["data"])["payload"]["output"]["content"] == "hola"
+
+
 async def test_viewer_api_canvas(tmp_path: Path) -> None:
     (tmp_path / "index.html").write_text("<html>canvas</html>")
     async with AsyncTestClient(app=ViewerApi(TOPOLOGY, LiveAdapter(), dist=tmp_path).asgi) as client:
@@ -127,3 +147,9 @@ async def test_viewer_api_no_canvas(tmp_path: Path) -> None:
     async with AsyncTestClient(app=ViewerApi(TOPOLOGY, LiveAdapter(), dist=tmp_path).asgi) as client:
         assert (await client.get("/")).status_code == 404
         assert (await client.get("/api/topology")).status_code == 200
+
+
+async def test_viewer_api_schema_file_is_the_contract() -> None:
+    ### the canvas's types are generated from ui/schema.json: it must still say what the API sends (`make ui-types`).
+    committed = (DIST.parent / "schema.json").read_bytes()
+    assert committed == msgspec.json.format(msgspec.json.encode(ViewerApi.schema()), indent=2) + b"\n"

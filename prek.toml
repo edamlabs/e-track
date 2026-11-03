@@ -9,6 +9,7 @@ hooks = [
     { id = "tach", name = "tach architecture check", entry = "uv run tach check", language = "system", pass_filenames = false },
     { id = "docs", name = "zensical strict build", entry = "uv run --no-sync zensical build --strict --clean", language = "system", files = '^(docs/|zensical\.toml$|assets/)', pass_filenames = false },
     { id = "validate", name = "validate pyproject", entry = "uv run validate-pyproject pyproject.toml", language = "system", files = '^pyproject\.toml$', pass_filenames = false },
+    { id = "canvas", name = "canvas biome + tsc", entry = "pnpm -C src/etrack/ui check", language = "system", files = '^src/etrack/ui/(src/|[^/]+\.(ts|json)$)', pass_filenames = false },
     { id = "zizmor", name = "workflow hardening scan", entry = "uv run zizmor --persona=regular .github/workflows", language = "system", files = "^\\.github/workflows/.*\\.ya?ml$", pass_filenames = false },
 ]
 

@@ -16,7 +16,7 @@ Run tracking for agent systems. A source turns a framework's run into **one even
 framework hooks ─► source ─► fold ─► channel (validate → publish → forward to host logger)
                                                  │
                                                  └─► bus ─┬─► otlp   spans + logs → Langfuse · LangSmith · Tempo · Phoenix
-                                                          ├─► live   per-thread replay + push → a canvas, a chat
+                                                          ├─► live   per-thread replay + push → the viewer, a chat
                                                           └─► yours  any SinkPort, any EventView
 ```
 
@@ -28,7 +28,8 @@ Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs fami
 uv add "e-track[langgraph,otel]"    # or: pip install "e-track[langgraph,otel]"
 ```
 
-Extras: `langgraph` (LangGraph/deepagents source and topology), `otel` (OTLP driver), `topology` (layout), `all`.
+Extras: `langgraph` (LangGraph/deepagents source and topology), `otel` (OTLP driver), `topology` (layout), `viewer`
+(the live canvas on Litestar + granian), `all`.
 Python 3.14+, typed (`py.typed`).
 
 ## Usage
@@ -68,6 +69,17 @@ With the house renderer (`ELogger`) on the host:
 Every frame is also a line on the host's `etrack` logger, rendered by the host's own structlog setup; e-track never
 configures logging.
 
+### The viewer
+
+```python
+viewer = Viewer(watch=live, topology=LanggraphTopologyAdapter().read(graph))
+async with GranianAdapter(viewer.app) as server:           # http://127.0.0.1:28130 — or mount viewer.app anywhere
+    ...
+```
+
+The declared graph lit live by its spans, a dropdown of every thread the live sink keeps, the span tree with each
+span's input, output and deltas. Server-Sent Events over Litestar, served by granian inside the host's own loop.
+
 ## The record
 
 | Field | What |
@@ -92,7 +104,7 @@ The full guide lives at [edamlabs.github.io/e-track](https://edamlabs.github.io/
 make install        # sync deps + prek hooks
 make check          # lint + type + arch + validate + test
 make cov            # coverage gate: 100 % lines and branches, every outbound service faked in process
-make integration    # real services: the session fixtures bring sandbox/compose.yml up and down (collector + Phoenix)
+make integration    # real services: the session fixtures bring tests/sandbox/compose.yml up and down (collector + Phoenix)
 make ci             # every gate CI runs, in one command
 ```
 

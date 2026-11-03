@@ -1,0 +1,26 @@
+{
+  "name": "etrack-viewer",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "check": "biome check . && tsc -b",
+    "fix": "biome check --write .",
+    "types": "json2ts -i schema.json -o src/contract.ts --unreachableDefinitions --additionalProperties false --bannerComment '/* Generated from msgspec.json.schema by `make ui-types`: never edit by hand. */'"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.11.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "json-schema-to-typescript": "^15.0.0",
+    "typescript": "^7.0.0",
+    "vite": "^8.2.0"
+  }
+}
