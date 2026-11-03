@@ -1,0 +1,404 @@
+{
+  "title": "Contract",
+  "type": "object",
+  "$defs": {
+    "Topology": {
+      "title": "Topology",
+      "description": "The declared graph: its nodes, its arcs, and the grid's extent once placed.",
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopologyNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopologyEdge"
+          }
+        },
+        "ranks": {
+          "type": "integer",
+          "default": 0
+        },
+        "lanes": {
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "nodes",
+        "edges"
+      ]
+    },
+    "TopologyNode": {
+      "title": "TopologyNode",
+      "description": "One declared node: its id, the name a span carries when it runs, and its place once laid out.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "boolean",
+          "default": false
+        },
+        "exit": {
+          "type": "boolean",
+          "default": false
+        },
+        "rank": {
+          "type": "integer",
+          "default": 0
+        },
+        "lane": {
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "TopologyEdge": {
+      "title": "TopologyEdge",
+      "description": "One declared arc: conditional when a router chooses it, `loop` when it closes a cycle.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "conditional": {
+          "type": "boolean",
+          "default": false
+        },
+        "label": {
+          "type": "string",
+          "default": ""
+        },
+        "loop": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target"
+      ]
+    },
+    "LiveSummary": {
+      "title": "LiveSummary",
+      "description": "A kept thread as a picker lists it: its next offset, its runs in the order they began, its last frame's time.",
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "thread",
+        "offset",
+        "runs",
+        "last"
+      ]
+    },
+    "RunEvent": {
+      "title": "RunEvent",
+      "description": "One frame of a run: who, where in the tree, what and when, and what it carried.\n\n`node`, `ns` and `step` are the graph coordinates when the source has a graph (the node a span runs under, its\nsubgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and\n`call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "default": 1
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string",
+          "default": ""
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string",
+          "default": ""
+        },
+        "kind": {
+          "$ref": "#/$defs/EventKind"
+        },
+        "phase": {
+          "$ref": "#/$defs/EventPhase"
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "node": {
+          "type": "string",
+          "default": ""
+        },
+        "ns": {
+          "type": "string",
+          "default": ""
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "visit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "part": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Part"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "message_id": {
+          "type": "string",
+          "default": ""
+        },
+        "call_id": {
+          "type": "string",
+          "default": ""
+        },
+        "at": {
+          "type": "string"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Failure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "payload": {
+          "type": "object",
+          "default": {}
+        },
+        "attributes": {
+          "type": "object",
+          "default": {}
+        }
+      },
+      "required": [
+        "run_id",
+        "seq",
+        "id",
+        "kind",
+        "phase"
+      ]
+    },
+    "EventKind": {
+      "title": "EventKind",
+      "description": "What a span is. `CUSTOM` is the fallback for whatever a source or a project names that no other kind covers.",
+      "enum": [
+        "agent",
+        "custom",
+        "embedding",
+        "evaluation",
+        "interrupt",
+        "llm",
+        "mcp",
+        "node",
+        "retrieval",
+        "run",
+        "state",
+        "subagent",
+        "tool"
+      ]
+    },
+    "EventPhase": {
+      "title": "EventPhase",
+      "description": "Where a span is in its life; `INSTANT` is a span that is born and closed at once (an interrupt, a state, a score).",
+      "enum": [
+        "delta",
+        "end",
+        "error",
+        "instant",
+        "start"
+      ]
+    },
+    "Part": {
+      "title": "Part",
+      "description": "What a streamed piece carries — LangChain's v1 content blocks, AG-UI's message kinds; `CUSTOM` for the rest.",
+      "enum": [
+        "audio",
+        "custom",
+        "file",
+        "image",
+        "reasoning",
+        "text",
+        "tool_call",
+        "video"
+      ]
+    },
+    "ModelRef": {
+      "title": "ModelRef",
+      "description": "Which model served a call: the provider, the model's name, and the request parameters worth keeping.",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "params": {
+          "type": "object",
+          "default": {}
+        }
+      },
+      "required": []
+    },
+    "Usage": {
+      "title": "Usage",
+      "description": "Tokens a model call spent, by kind, and its cost when the source knows it.",
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "total_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "reasoning_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "cache_read_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "default": 0
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": []
+    },
+    "Failure": {
+      "title": "Failure",
+      "description": "Why a span failed: the exception's type and its message.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "type"
+      ]
+    }
+  }
+}

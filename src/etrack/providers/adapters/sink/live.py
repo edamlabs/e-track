@@ -3,22 +3,25 @@
 A thread is a conversation: its frames, across runs, get a thread-wide `offset` (contiguous, from 0) and the last
 `buffer` of them are kept. `watch(thread, after)` replays what is kept past the cursor, then follows live — a client
 that reconnects with the last offset it saw misses nothing still buffered. A watcher that lags more than `backlog`
-frames is cut off rather than slowing the bus; threads beyond `threads` are evicted, least recently written first."""
+frames is cut off rather than slowing the bus; threads beyond `threads` are evicted, least recently written first.
+`threads()` lists what is kept, the most recently written first: each thread's next offset, its runs and when it last
+wrote — what a viewer offers to pick from."""
 
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
 import anyio
-import msgspec
 
 from etrack.infra.logger import logger
 from etrack.infra.settings import settings as st
 from etrack.models.event import EventPhase, RunEvent
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
+from etrack.ports.sink import LiveFrame, LiveSummary
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from datetime import datetime
 
     from anyio.streams.memory import MemoryObjectSendStream
 
@@ -28,19 +31,14 @@ if TYPE_CHECKING:
 PHASES: Final[frozenset[EventPhase]] = frozenset(EventPhase)
 
 
-class LiveFrame(msgspec.Struct, frozen=True, kw_only=True):
-    """A frame as a watcher receives it: its place in the thread, and the event."""
-
-    offset: int
-    event: RunEvent
-
-
 @dataclass(slots=True)
 class LiveThread:
-    """One conversation: its next offset, the frames kept, and who watches it."""
+    """One conversation: its next offset, the frames kept, its runs, when it last wrote, and who watches it."""
 
     buffer: deque[LiveFrame]
     offset: int = 0
+    runs: dict[str, None] = field(default_factory=dict)
+    last: datetime | None = None
     watchers: set[MemoryObjectSendStream[LiveFrame]] = field(default_factory=set)
 
 
@@ -115,6 +113,8 @@ class LiveAdapter:
         watched = self._common_thread(event.thread_id)
         frame = LiveFrame(offset=watched.offset, event=event)
         watched.offset += 1
+        watched.runs.setdefault(event.run_id)
+        watched.last = event.at
         watched.buffer.append(frame)
         self._send_push(watched, frame)
 
@@ -135,6 +135,15 @@ class LiveAdapter:
         finally:
             watched.watchers.discard(send)
             send.close()
+
+    def threads(self) -> tuple[LiveSummary, ...]:
+        """Every kept thread that has written, the most recently written first."""
+        summaries = (
+            LiveSummary(thread=name, offset=kept.offset, runs=tuple(kept.runs), last=kept.last)
+            for name, kept in self._threads.items()
+            if kept.last is not None
+        )
+        return tuple(sorted(summaries, key=lambda summary: summary.last, reverse=True))
 
     def offset(self, thread: str) -> int:
         """The offset the thread's next frame will take: how many frames it has had."""

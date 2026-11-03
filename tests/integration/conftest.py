@@ -1,4 +1,4 @@
-"""tests/integration: the sandbox as session fixtures — `sandbox/compose.yml` up once per session, down when it ends.
+"""tests/integration: the sandbox as session fixtures — `tests/sandbox/compose.yml` up once per session, down when it ends.
 
 pytest-docker owns the compose lifecycle (`up --build --wait`, `down -v`, a project named per process); these fixtures
 point it at the sandbox, hand the collector a per-session output directory and the host's user, and wait until every
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from pytest_docker.plugin import Services
 
-COMPOSE: Final[Path] = Path(__file__).resolve().parents[2] / "sandbox" / "compose.yml"
+COMPOSE: Final[Path] = Path(__file__).resolve().parents[1] / "sandbox" / "compose.yml"
 BOOT: Final[float] = 120.0
 PAUSE: Final[float] = 0.5
 

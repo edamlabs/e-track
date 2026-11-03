@@ -53,7 +53,7 @@ deliberate errors in `RunEvent` and `FoldProcessor` usage — the marker is read
 
 ### 2026-11-03 · The integration sandbox is a session fixture
 
-**Decision.** `sandbox/compose.yml` — an OpenTelemetry Collector (contrib 0.162.0) writing OTLP/JSON files, and
+**Decision.** `tests/sandbox/compose.yml` (a test resource, beside the fixtures that use it) — an OpenTelemetry Collector (contrib 0.162.0) writing OTLP/JSON files, and
 Arize Phoenix (21.0.0) — is brought up by pytest-docker when the first integration test asks for it and torn down
 when the session ends. Host ports are ephemeral, the collector's output is a per-session temp dir, the tier is
 opt-in (`-m integration`) and errors without docker instead of skipping. Unit tests keep faking every outbound
@@ -77,3 +77,21 @@ only when a brand repeats across capabilities (`LanggraphSourceAdapter`, `Langgr
 brand takes its capability as qualifier (`TeiEmbedDriver`). `OtlpDriver` already followed it; two adapters did not.
 
 **Rejected.** Keeping the capability everywhere (the folder already says it; the law forbids saying it twice).
+
+### 2026-11-03 · The live viewer ships in e-track, on Litestar and granian
+
+**Decision.** The viewer deeptrack was building (TODO_viewer, transferred) is `e-track[viewer]`: a Litestar app
+(`etrack.api.viewer`) over the live sink's `WatchPort` and a laid-out `Topology`, served by granian's embedded server
+as a task of the host's loop (`GranianAdapter`) or mounted in the host's own app; the canvas (Vite, React 19,
+`@xyflow/react` 12) is built into `etrack/ui/dist` and shipped in the wheel and the sdist. The stream is Server-Sent
+Events — `id` = the thread offset, resumed by `Last-Event-ID` — and its frames are encoded by e-serde. The canvas's
+TypeScript types are generated from msgspec's JSON Schema of the API (`make ui-types`), drift-gated.
+
+**Evidence.** The record, the topology, the layout and the live buffer already lived here; deeptrack's track API was
+generic glue. granian embedded: up in 24–64 ms, clean stop, no signal handler taken. A real deep-agent run, viewed in a
+browser, found two defects the unit tier had missed: LangChain objects in payloads killed the stream (e-serde 0.6.4
+fixed its Struct walk) and a subagent's inner nodes lit the outer graph's (the canvas now lights only the outer run).
+
+**Rejected.** uvicorn (granian is the house's Rust-backed server and embeds); AG-UI as the stream (a chat protocol, not
+a span tree); client-side layout (ELK — the server places the graph once); WebSocket (one-way, resumable SSE suffices);
+an in-memory ASGI test transport for SSE (it buffers the whole response — the SSE tests run on a real granian port).

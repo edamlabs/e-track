@@ -19,21 +19,24 @@ from etrack.ports.provider import Locality, Provider, ProviderSpec
 
 PACKAGE: Final = Path(__file__).resolve().parents[2] / "src" / "etrack"
 FORBIDDEN: Final[dict[str, frozenset[str]]] = {
-    "models": frozenset({"ports", "providers", "processors", "logic", "infra"}),
-    "ports": frozenset({"providers", "processors", "logic"}),
-    "providers/drivers": frozenset({"providers", "processors", "logic"}),
-    "providers/adapters": frozenset({"providers", "processors", "logic"}),
-    "processors": frozenset({"providers", "logic"}),
+    "models": frozenset({"ports", "providers", "processors", "logic", "infra", "api"}),
+    "ports": frozenset({"providers", "processors", "logic", "api"}),
+    "providers/drivers": frozenset({"providers", "processors", "logic", "api"}),
+    "providers/adapters": frozenset({"providers", "processors", "logic", "api"}),
+    "processors": frozenset({"providers", "logic", "api"}),
+    "api": frozenset({"providers", "processors", "logic"}),
     "logic": frozenset({"providers"}),
-    "infra": frozenset({"ports", "providers", "processors", "logic", "models"}),
-    "ops": frozenset({"ports", "providers", "processors", "logic", "models"}),
+    "infra": frozenset({"ports", "providers", "processors", "logic", "models", "api"}),
+    "ops": frozenset({"ports", "providers", "processors", "logic", "models", "api"}),
 }
 FRAMEWORKS: Final[dict[str, frozenset[str]]] = {
     "langchain_core": frozenset({"providers/adapters/source/langgraph.py"}),
     "langgraph": frozenset({"providers/adapters/source/langgraph.py", "providers/adapters/topology/langgraph.py"}),
     "opentelemetry": frozenset({"providers/drivers/sink/otlp.py"}),
     "rustworkx": frozenset({"processors/layout.py"}),
-    "eserde": frozenset({"providers/drivers/sink/otlp.py"}),
+    "eserde": frozenset({"providers/drivers/sink/otlp.py", "api/viewer.py"}),
+    "litestar": frozenset({"api/viewer.py"}),
+    "granian": frozenset({"providers/adapters/server/granian.py"}),
 }
 LIFECYCLE: Final = ("__aenter__", "__aexit__", "health")
 
