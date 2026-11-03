@@ -45,3 +45,12 @@ async def test_layout_empty() -> None:
 async def test_layout_refuses_unknown_arc() -> None:
     with pytest.raises(LayoutError, match="ghost"):
         LayoutProcessor().place(topology([("start", "ghost")], names=["start"]))
+
+
+async def test_layout_keeps_what_nodes_carry() -> None:
+    labelled = Topology(
+        nodes=(TopologyNode(id="a", name="a", label="Start here", entry=True), TopologyNode(id="b", name="b")),
+        edges=(TopologyEdge(id="a>b", source="a", target="b", label="go"),),
+    )
+    placed = LayoutProcessor().place(labelled)
+    assert (placed.nodes[0].label, placed.nodes[1].rank, placed.edges[0].label) == ("Start here", 1, "go")

@@ -1,47 +1,67 @@
 # Introduction
 
-An agent run is a tree of spans: the run, its nodes, the model calls and tool calls under them, the subagents they
-delegate to. Every framework reports that tree its own way, and every backend wants it its own way. e-track puts one
-record between them.
+e-track is part of the **EDamLabs eager series** (`e-`) — EDamLabs' own local-first, production-grade components
+([EDamLabs families](https://github.com/edamlabs/e-workbench#identity)). e-track is its run-tracking layer.
+
+## Why
+
+An agent run is a tree: the run, the graph's nodes, the model calls and tool calls inside them, the subagents they
+delegate to, and the subagents' own nodes and calls. When it goes wrong — or slow, or expensive — you need to see that
+tree.
+
+Every framework reports it its own way, and every place you would look at it wants it its own way: Langfuse wants its
+observation types, Phoenix wants OpenInference span kinds, LangSmith its run tree, a chat UI wants the streamed text, a
+dashboard the tokens. The usual answer is one integration per backend, each with its own handler hooked into the
+agent, each slowing it down a little, each failing in its own way.
+
+e-track's answer: **one record in the middle**. A source reads the framework once and writes one event per span edge;
+everything else — every backend, every UI, your own code — reads that event. Adding a backend is adding a sink, never
+touching the agent.
+
+## How it works
 
 ```
-framework hooks ─► source ─► fold ─► channel (validate → publish → forward to host logger)
-                                                 │
-                                                 └─► bus ─┬─► otlp   spans + logs → Langfuse · LangSmith · Tempo · Phoenix
-                                                          ├─► live   per-thread replay + push → a canvas, a chat
-                                                          └─► yours  any SinkPort, any EventView
+your agent ──► source ──► fold ──► channel ──► bus ──┬──► otlp   → Langfuse · LangSmith · Phoenix · Tempo
+ (LangGraph)   reads the   orders,   validates,      ├──► live   → the viewer, a chat, a reconnect
+               callbacks   parents   publishes       └──► yours  → anything that takes events
 ```
 
-| Piece | Is | Module |
+| Piece | Does | You touch it |
 |---|---|---|
-| source | a framework's hooks reported as span edges | `etrack.providers.adapters.source.langgraph` |
-| fold | edges folded into ordered, parented, stamped frames | `etrack.processors.fold` |
-| channel | the log that carries the frames: validate, publish, forward | `etrack.logic.channel` |
-| bus | one bounded stream and one worker per sink | `etrack.providers.adapters.bus.anyio` |
-| sinks | the clients: OTLP over the wire, live in memory, yours | `etrack.providers.{drivers,adapters}.sink` |
-| tracker | the public surface: one run from a host's config | `etrack.logic.api` |
+| **Tracker** | opens a run: an id, the source's hook bound into your config | once per run: `tracker.track(...)` |
+| **Source** | turns the framework's callbacks into span edges | once, when you build the tracker |
+| **Fold** | orders the edges, parents them, stamps latency and the run's ids | for spans of your own code: `run.fold.span(...)` |
+| **Channel** | validates each frame into a `RunEvent`, publishes it, logs a line on your logger | never, unless you emit by hand |
+| **Bus** | one bounded queue and one worker per sink: publish never waits | once: `bus.subscribe(sink)` |
+| **Sinks** | where the events go: OTLP, the live buffer, your own | once each |
 
-## The record
+The record is the contract: [The record](guide/record.md). The rest is wiring you do once, at startup.
 
-| Field | What |
-|---|---|
-| `run_id`, `thread_id` | the run (32 hex, also the W3C trace id) and the conversation |
-| `seq`, `id`, `parent` | order within the run; the span and its visible parent |
-| `kind` | `run agent subagent node llm embedding retrieval tool mcp interrupt state evaluation custom` |
-| `phase` | `start delta end error instant` |
-| `part` | on deltas: `text reasoning tool_call image audio video file custom` |
-| `node`, `ns`, `step`, `visit` | graph coordinates: node, subgraph path, superstep, times the run entered the node |
-| `message_id`, `call_id` | the chat message and the tool call a client renders |
-| `model`, `usage`, `error` | typed sections: provider/name/params, tokens/cost, failure |
-| `payload`, `attributes` | what the span carried (redacted); the open, namespaced extension bag |
+## Built on open-source engines
 
-Grow it by subclassing `RunEvent` and passing the subclass to `EventChannel(model=…)`; read it through an
-`EventView`: a client declares the fields it needs and `View.project(event)` narrows any event onto it.
+Nothing here is reinvented; each concern runs on the tool that already does it best:
 
-## The layers
+| Concern | Engine | Language |
+|---|---|---|
+| Reading LangGraph runs | LangChain callbacks (inline, no thread hop) | Python |
+| The record and its validation | msgspec | C |
+| The channel | structlog (a logger of its own) | Python |
+| The bus | anyio memory streams | Python |
+| Spans and logs out | OpenTelemetry SDK, OTLP/HTTP | Python |
+| Encoding what agents carry | e-serde | Rust + C |
+| Graph layout | rustworkx | Rust |
+| The viewer's server | Litestar on granian's embedded server | Python + Rust |
+| The viewer's canvas | React 19, React Flow 12 | TypeScript |
 
-The package follows the house taxonomy: `models` (the record) and `ports` (the contracts) at the floor; `providers`
-— `drivers` when the work happens outside the process (OTLP), `adapters` when a library runs inside it (anyio,
-LangGraph, the live buffer); `processors` that transform (fold, layout); `logic`, the public surface. Layers import
-only downward: `tach` and `tests/unit/test_taxonomy.py` hold the table, and every foreign framework enters through
-the one module that owns it.
+## What it is not
+
+- **Not a tracing backend.** It stores nothing for long; it sends. The live buffer keeps the last frames of each
+  conversation in memory for the viewer, nothing more. Langfuse, Phoenix or Tempo are where history lives.
+- **Not a logging framework.** It never configures your logging: each frame is also one line on your own `etrack`
+  logger, rendered by whatever you already set up.
+- **Not tied to LangGraph by design.** LangGraph is the source that exists today; a source is one module that turns a
+  framework's hooks into edges, and nothing past it knows which framework ran.
+- **Not a multi-process view yet.** The viewer reads one process's live buffer: with several replicas, each viewer
+  sees its own.
+
+Next: [Installation →](installation.md)

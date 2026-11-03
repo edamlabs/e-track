@@ -18,3 +18,18 @@ async def test_viewer_places_and_serves() -> None:
     async with AsyncTestClient(app=viewer.app) as client:
         reply = await client.get("/api/topology")
     assert reply.json()["ranks"] == 2
+
+
+async def test_viewer_labels_override_by_id() -> None:
+    topology = Topology(
+        nodes=(
+            TopologyNode(id="a", name="a", label="Declared", entry=True),
+            TopologyNode(id="b", name="PatchToolCallsMiddleware.before_agent"),
+        ),
+        edges=(TopologyEdge(id="a>b", source="a", target="b"),),
+    )
+    viewer = Viewer(watch=LiveAdapter(), topology=topology, labels={"b": "Patch tool calls"})
+    assert [(node.name, node.label) for node in viewer.topology.nodes] == [
+        ("a", "Declared"),
+        ("PatchToolCallsMiddleware.before_agent", "Patch tool calls"),
+    ]

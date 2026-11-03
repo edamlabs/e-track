@@ -1,13 +1,25 @@
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Background, Controls, ReactFlow, useNodesInitialized, useReactFlow } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchThreads, fetchTopology, followThread } from "./api";
 import type { LiveSummary, RunEvent, Topology } from "./contract";
+import { LEGEND } from "./kinds";
 import { arcs, calls, stages } from "./layout";
 import { NODE_TYPES } from "./nodes";
-import { Panel } from "./panel";
+import { Panel, type Pick } from "./panel";
 import { fold, type Span } from "./spans";
 
 const POLL_MS = 2000;
+
+// The view refits whenever the canvas grows: calls appear while the run goes on, after the first fit.
+// Only once the nodes are measured: a fit before that frames boxes of unknown size and lands off-centre.
+function FitOnGrow({ count }: { count: number }) {
+  const { fitView } = useReactFlow();
+  const measured = useNodesInitialized();
+  useEffect(() => {
+    if (measured && count > 0) fitView({ duration: 200, padding: 0.12 });
+  }, [measured, count, fitView]);
+  return null;
+}
 
 function initialThread(): string {
   return new URLSearchParams(window.location.search).get("thread") ?? "";
@@ -20,7 +32,7 @@ export function App() {
   const [frames, setFrames] = useState<RunEvent[]>([]);
   const [run, setRun] = useState("");
   const [online, setOnline] = useState(false);
-  const [picked, setPicked] = useState("");
+  const [picked, setPicked] = useState<Pick>(null);
 
   useEffect(() => {
     fetchTopology().then(setTopology);
@@ -45,7 +57,7 @@ export function App() {
     window.history.replaceState(null, "", url);
     setFrames([]);
     setRun("");
-    setPicked("");
+    setPicked(null);
     return followThread(thread, (event) => setFrames((seen) => [...seen, event]), setOnline);
   }, [thread]);
 
@@ -63,6 +75,17 @@ export function App() {
     const live = calls(declared, spans);
     return { nodes: [...declared, ...live.nodes], edges: [...arcs(topology, spans), ...live.edges] };
   }, [topology, spans]);
+
+  // The pick is the canvas's selection too: the node or the call it names is drawn selected.
+  const nodes = useMemo(
+    () =>
+      graph.nodes.map((node) => ({
+        ...node,
+        selected:
+          picked?.type === "node" ? node.id === picked.id : picked?.type === "span" && node.data.span === picked.id,
+      })),
+    [graph.nodes, picked],
+  );
 
   return (
     <div className="shell">
@@ -89,15 +112,30 @@ export function App() {
             ))}
           </select>
         </label>
+        <span className="legend">
+          {LEGEND.map((entry) => (
+            <span key={entry.family} className={`swatch fam-${entry.family}`}>
+              {entry.label}
+            </span>
+          ))}
+          <span className="states">◌ running · ✓ done · ✕ error</span>
+        </span>
         <span className={`online ${online ? "on" : "off"}`}>{online ? "live" : "reconnecting"}</span>
       </header>
       <main>
         <div className="canvas">
           <ReactFlow
-            nodes={graph.nodes}
+            nodes={nodes}
             edges={graph.edges}
             nodeTypes={NODE_TYPES}
-            onNodeClick={(_, node) => setPicked(typeof node.data.span === "string" ? node.data.span : "")}
+            onNodeClick={(_, node) =>
+              setPicked(
+                typeof node.data.span === "string"
+                  ? { type: "span", id: node.data.span }
+                  : { type: "node", id: node.id },
+              )
+            }
+            onPaneClick={() => setPicked(null)}
             nodeOrigin={[0.5, 0]}
             fitView
             proOptions={{ hideAttribution: true }}
@@ -105,9 +143,10 @@ export function App() {
           >
             <Background gap={24} />
             <Controls showInteractive={false} />
+            <FitOnGrow count={graph.nodes.length} />
           </ReactFlow>
         </div>
-        <Panel spans={spans} picked={picked} pick={setPicked} />
+        {topology && <Panel topology={topology} spans={spans} picked={picked} pick={setPicked} />}
       </main>
     </div>
   );

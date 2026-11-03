@@ -73,3 +73,19 @@ async def test_langgraph_json_names() -> None:
 async def test_langgraph_rejects_foreign_json() -> None:
     with pytest.raises(SourceError, match=r"not the JSON of Graph\.to_json\(\)"):
         LanggraphTopologyAdapter().read({"nodes": "nope"})
+
+
+async def test_langgraph_reads_declared_labels() -> None:
+    def step(state: MessagesState) -> dict[str, Any]:
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("plan", step, metadata={"label": "Plan the answer"})
+    graph.add_node("act", step)
+    graph.add_edge(START, "plan")
+    graph.add_edge("plan", "act")
+    graph.add_edge("act", END)
+    compiled = graph.compile()
+    for read in (compiled, compiled.get_graph(xray=True).to_json()):
+        labels = {node.id: node.label for node in LanggraphTopologyAdapter().read(read).nodes}
+        assert (labels["plan"], labels["act"]) == ("Plan the answer", "")

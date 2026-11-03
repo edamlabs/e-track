@@ -95,3 +95,18 @@ fixed its Struct walk) and a subagent's inner nodes lit the outer graph's (the c
 **Rejected.** uvicorn (granian is the house's Rust-backed server and embeds); AG-UI as the stream (a chat protocol, not
 a span tree); client-side layout (ELK — the server places the graph once); WebSocket (one-way, resumable SSE suffices);
 an in-memory ASGI test transport for SSE (it buffers the whole response — the SSE tests run on a real granian port).
+
+### 2026-11-03 · A node's label is not its name; kinds take three colour families
+
+**Decision.** `TopologyNode` gains `label`, display only, beside `name` — declared with the node in LangGraph's
+metadata or given by the host (`Viewer(labels=…)`). Kinds are coloured by family on the canvas — model (blue), action
+(orange), delegation (aqua) — every other kind neutral, the kind always written beside its colour; status is a glyph
+(◌ ✓ ✕), red only for an error.
+
+**Evidence.** `name` is the key a span lights its node with: renaming it would unlink the canvas from the run. The
+palette was validated with the dataviz checker on the canvas surface, every pair on screen: a fourth hue drops the
+colour-blind separation to ΔE 1.6 (deutan), a fifth breaks the normal-vision floor; the status green and red clashed
+with the orange and aqua at any count, so status left hue for shape.
+
+**Rejected.** An alias on `RunEvent` (the record would carry presentation); one hue per kind (thirteen hues no reader
+tells apart); status as border colour (it collided with the kinds).

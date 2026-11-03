@@ -61,7 +61,7 @@ hooks: ## run all prek hooks on every file (ruff, ty, tach, zizmor, gitleaks)
 test: ## run tests, benchmarks out by default [TESTARGS='-k expr']
 	@uv run pytest tests $(TESTARGS) -n auto -q
 
-integration: ## real services: session fixtures bring tests/sandbox/compose.yml up (collector + Phoenix) and down; needs docker
+integration: ui ## real services: tests/sandbox up and down (collector + Phoenix), the viewer end to end; needs docker
 	@uv run pytest tests -m integration -q -p no:randomly
 
 cov: ## run tests with coverage gate (fail under 100%), benchmarks out like the CI matrix
