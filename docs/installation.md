@@ -1,27 +1,54 @@
 # Installation
 
-Python 3.14 or newer.
+e-track targets **CPython 3.14+**. It is pure Python: one wheel for every platform, the viewer's canvas built in.
 
-```bash
-uv add e-track                          # the record, the channel, the bus, the live sink
-uv add "e-track[langgraph,otel]"        # + the LangGraph source and the OTLP driver
-uv add "e-track[all]"                   # everything
-```
+=== "uv"
 
-| Extra | Brings | For |
+    ```bash
+    uv add "e-track[langgraph,otel]"
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "e-track[langgraph,otel]"
+    ```
+
+## Extras
+
+The core carries the record, the channel, the bus and the live buffer. Everything that speaks to a framework or a
+backend is an extra — install what you use:
+
+| Extra | Brings | Install it for |
 |---|---|---|
-| `langgraph` | `langchain-core`, `langgraph` | the LangGraph source (deepagents included) and topology |
-| `otel` | `opentelemetry-sdk`, the OTLP/HTTP exporter, `e-serde` | the OTLP driver: Langfuse, LangSmith, Phoenix, Tempo, any collector |
-| `topology` | `rustworkx` | the layout processor |
+| `langgraph` | `langchain-core`, `langgraph` | tracking LangGraph agents (deepagents included) and reading their graph |
+| `otel` | `opentelemetry-sdk`, the OTLP/HTTP exporter, `e-serde` | sending to Langfuse, LangSmith, Phoenix, Tempo or any OpenTelemetry collector |
+| `viewer` | `litestar`, `granian`, `e-serde`, `rustworkx` | the live canvas |
+| `topology` | `rustworkx` | laying out a graph without the viewer |
 | `all` | every extra | |
 
-The core depends on `msgspec`, `structlog`, `anyio` and `pydantic-settings` only. The package ships `py.typed`.
+The core depends on `msgspec`, `structlog`, `anyio` and `pydantic-settings` only.
+
+## Verify
+
+```python
+import importlib.metadata
+
+from etrack.logic.api import Tracker
+
+print(importlib.metadata.version("e-track"))   # e.g. 0.1.3
+```
+
+The package ships `py.typed`: mypy, pyright and ty check your calls against it.
 
 ## From source
 
 ```bash
 git clone https://github.com/edamlabs/e-track && cd e-track
-make install        # uv sync + prek hooks
+make install        # uv sync, the canvas's pnpm deps, the prek hooks
 make check          # lint · types · architecture · tests
-make integration    # real services: the sandbox comes up and down with the session (needs docker)
+make integration    # the tests against real services (needs docker): a collector and Phoenix come up and go down
+make ui             # rebuild the viewer's canvas
 ```
+
+Next: [Quickstart →](quickstart.md)

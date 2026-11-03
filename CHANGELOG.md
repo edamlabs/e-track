@@ -6,8 +6,29 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- Viewer (`e-track[viewer]`, TODO_viewer): the declared graph and every thread's span tree, live. `Viewer(watch,
+  topology)` places the graph and builds an ASGI app — `/api/topology`, `/api/threads`, `/api/threads/{thread}/events`
+  (Server-Sent Events, resumed by `Last-Event-ID`), OpenAPI, and a React Flow canvas shipped in the wheel —
+  mountable in a host or served by `GranianAdapter`, granian's embedded server inside the host's loop.
+- `LiveAdapter.threads()`: the kept threads, newest first, with their runs. `WatchPort`, `LiveFrame`, `LiveSummary`
+  and `ServerPort` join the ports.
+- `LanggraphTopologyAdapter.read` takes the JSON of LangChain's `Graph.to_json()` as well as a compiled graph.
 - `LanggraphSourceAdapter` lifts the run's metadata under `app.` (agent versions, tenant…) onto the root span's
   `attributes`: every sink sees the run's own facts — OTLP exports them as span attributes.
+
+### Fixed
+
+- Bus: `health()` is false once the supervisor ends, and a supervisor that fails before opening raises instead of
+  hanging `__aenter__` (its streams closed).
+
+- Viewer: the canvas refits as it grows — the calls a run makes no longer fall outside the first frame.
+
+### Changed
+
+- The integration sandbox moves to `tests/sandbox/`, a test resource beside the fixtures that bring it up.
+- Documentation rewritten (TODO_docs): what e-track is for and how to use it — introduction, installation, a
+  three-step quickstart, and a guide (the record, tracking runs, sinks, backends, viewer, logging, settings), every
+  example run for real with its output; the README follows.
 
 ## [0.1.2] — 2026-11-03
 

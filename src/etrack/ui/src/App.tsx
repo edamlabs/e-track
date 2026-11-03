@@ -1,4 +1,4 @@
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Background, Controls, ReactFlow, useReactFlow } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchThreads, fetchTopology, followThread } from "./api";
 import type { LiveSummary, RunEvent, Topology } from "./contract";
@@ -8,6 +8,15 @@ import { Panel } from "./panel";
 import { fold, type Span } from "./spans";
 
 const POLL_MS = 2000;
+
+// The view refits whenever the canvas grows: calls appear while the run goes on, after the first fit.
+function FitOnGrow({ count }: { count: number }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (count > 0) fitView({ duration: 200 });
+  }, [count, fitView]);
+  return null;
+}
 
 function initialThread(): string {
   return new URLSearchParams(window.location.search).get("thread") ?? "";
@@ -105,6 +114,7 @@ export function App() {
           >
             <Background gap={24} />
             <Controls showInteractive={false} />
+            <FitOnGrow count={graph.nodes.length} />
           </ReactFlow>
         </div>
         <Panel spans={spans} picked={picked} pick={setPicked} />

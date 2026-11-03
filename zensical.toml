@@ -13,7 +13,16 @@ nav = [
   { "Getting started" = [
     { "Introduction" = "introduction.md" },
     { "Installation" = "installation.md" },
-    { "Usage" = "usage.md" },
+    { "Quickstart" = "quickstart.md" },
+  ] },
+  { "Guide" = [
+    { "The record" = "guide/record.md" },
+    { "Tracking runs" = "guide/tracking.md" },
+    { "Sinks" = "guide/sinks.md" },
+    { "Backends" = "guide/backends.md" },
+    { "Viewer" = "guide/viewer.md" },
+    { "Logging" = "guide/logging.md" },
+    { "Settings" = "guide/settings.md" },
   ] },
   { "Project" = [
     { "Decisions" = "decisions.md" },

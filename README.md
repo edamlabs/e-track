@@ -9,18 +9,16 @@
   <img src="assets/logo.svg" alt="e-track" height="110" />
 </p>
 
-Run tracking for agent systems. A source turns a framework's run into **one event model**; the model travels on a
-**structlog channel** of its own; a bus fans it out to **parallel sinks**, each reading the partial view it declares.
-
-```
-framework hooks ─► source ─► fold ─► channel (validate → publish → forward to host logger)
-                                                 │
-                                                 └─► bus ─┬─► otlp   spans + logs → Langfuse · LangSmith · Tempo · Phoenix
-                                                          ├─► live   per-thread replay + push → the viewer, a chat
-                                                          └─► yours  any SinkPort, any EventView
-```
+**See what your agents are doing.** e-track turns every run of a LangGraph agent — its nodes, model calls, tools, MCP
+calls and subagents — into one stream of events, and sends it wherever you look: Langfuse, Phoenix, LangSmith, any
+OpenTelemetry backend, your own code, or a live canvas of the graph. Adding a backend never touches the agent, and a
+slow backend never slows it.
 
 Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs families](https://github.com/edamlabs/e-workbench#identity)).
+
+<p align="center">
+  <img src="assets/viewer.png" alt="The live viewer: the agent's graph lit by its run, the calls of each node, the span tree with every span's input and output" width="900" />
+</p>
 
 ## Install
 
@@ -28,73 +26,51 @@ Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs fami
 uv add "e-track[langgraph,otel]"    # or: pip install "e-track[langgraph,otel]"
 ```
 
-Extras: `langgraph` (LangGraph/deepagents source and topology), `otel` (OTLP driver), `topology` (layout), `viewer`
-(the live canvas on Litestar + granian), `all`.
+| Extra | For |
+|---|---|
+| `langgraph` | tracking LangGraph agents (deepagents included) |
+| `otel` | Langfuse, LangSmith, Phoenix, Tempo, any OpenTelemetry collector |
+| `viewer` | the live canvas (Litestar on granian, React Flow) |
+| `all` | everything |
+
 Python 3.14+, typed (`py.typed`).
 
 ## Usage
 
 ```python
-from contextlib import AsyncExitStack
-
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
-from etrack.models.event import EventKind
 from etrack.providers.adapters.bus.anyio import AnyioAdapter
-from etrack.providers.adapters.sink.live import LiveAdapter
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 
-async with AsyncExitStack() as stack:                       # the host's composition root
-    live = await stack.enter_async_context(LiveAdapter())
-    otlp = await stack.enter_async_context(OtlpDriver())
+async with OtlpDriver() as otlp:                     # targets from ETRACK_OTLP_TARGETS
     bus = AnyioAdapter()
-    bus.subscribe(live)
-    bus.subscribe(otlp, select=lambda event: event if event.part is None else None)  # policy per sink
-    await stack.enter_async_context(bus)                   # opened last: closed first, drains into the sinks
-    tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter(mcp=frozenset({"onto_query"})))
-
-    with tracker.track(thread="t1", config={"configurable": {"thread_id": "t1"}}) as run:
-        await graph.ainvoke({"messages": [("user", "hola")]}, run.config)
-        with run.fold.span("gate", kind=EventKind.EVALUATION):
-            ...                                             # the project's own code, same tree
+    bus.subscribe(otlp)                              # and the live buffer, and your own sinks
+    async with bus:
+        tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter())
+        with tracker.track(thread="t1", config={}) as run:
+            await agent.ainvoke(inputs, run.config)  # your graph, untouched: the config carries the hook
 ```
 
-With the house renderer (`ELogger`) on the host:
-
-```
-2026-11-03T12:00:00Z | INFO | run.event || run_id: 019a… || kind: node || phase: start || name: agent || step: 1
+```bash
+ETRACK_OTLP_TARGETS='{"phoenix": {"endpoint": "http://localhost:6006"}}'
 ```
 
-Every frame is also a line on the host's `etrack` logger, rendered by the host's own structlog setup; e-track never
-configures logging.
-
-### The viewer
+And the live canvas, one line more:
 
 ```python
-viewer = Viewer(watch=live, topology=LanggraphTopologyAdapter().read(graph))
-async with GranianAdapter(viewer.app) as server:           # http://127.0.0.1:28130 — or mount viewer.app anywhere
+viewer = Viewer(watch=live, topology=LanggraphTopologyAdapter().read(agent))
+async with GranianAdapter(viewer.app) as server:     # http://127.0.0.1:28130 — or mount viewer.app in your app
     ...
 ```
 
-The declared graph lit live by its spans, a dropdown of every thread the live sink keeps, the span tree with each
-span's input, output and deltas. Server-Sent Events over Litestar, served by granian inside the host's own loop.
-
-## The record
-
-| Field | What |
+| Read | For |
 |---|---|
-| `run_id`, `thread_id` | the run (32 hex, also the W3C trace id) and the conversation |
-| `seq`, `id`, `parent` | order within the run; the span and its visible parent |
-| `kind` | `run agent subagent node llm embedding retrieval tool mcp interrupt state evaluation custom` |
-| `phase` | `start delta end error instant` |
-| `part` | on deltas: `text reasoning tool_call image audio video file custom` |
-| `node`, `ns`, `step`, `visit` | graph coordinates: node, subgraph path, superstep, times the run entered the node |
-| `message_id`, `call_id` | the chat message and the tool call a client renders |
-| `model`, `usage`, `error` | typed sections: provider/name/params, tokens/cost, failure |
-| `payload`, `attributes` | what the span carried (redacted); the open, namespaced extension bag |
-
-Grow it by subclassing `RunEvent` and passing the subclass to `EventChannel(model=…)`; read it through an `EventView`.
+| [Quickstart](https://edamlabs.github.io/e-track/quickstart/) | three steps on a small graph, every output shown |
+| [The record](https://edamlabs.github.io/e-track/guide/record/) | what an event holds: kinds, phases, the fields |
+| [Backends](https://edamlabs.github.io/e-track/guide/backends/) | Langfuse, Phoenix, LangSmith, Tempo — settings and what is verified |
+| [Viewer](https://edamlabs.github.io/e-track/guide/viewer/) | serve or mount the canvas, its API |
 
 The full guide lives at [edamlabs.github.io/e-track](https://edamlabs.github.io/e-track/).
 

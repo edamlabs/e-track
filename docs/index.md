@@ -6,22 +6,27 @@ hide:
 
 <div class="rx-hero">
   <img src="assets/logo.svg" alt="e-track">
-  <p>Run tracking for agent systems. A source turns a framework's run into <strong>one event model</strong>; the
-  model travels on a <strong>structlog channel</strong> of its own; a bus fans it out to <strong>parallel
-  sinks</strong>, each reading the partial view it declares.</p>
+  <p>See what your agents are doing. e-track turns every run of a <strong>LangGraph</strong> agent — its nodes, model
+  calls, tools, MCP calls and subagents — into <strong>one stream of events</strong>, and sends it wherever you look:
+  Langfuse, Phoenix, any OpenTelemetry backend, your own code, or a <strong>live canvas</strong> of the graph.</p>
 </div>
 
 Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs families](https://github.com/edamlabs/e-workbench#identity)).
 
 <div class="rx-grid">
-  <div><h3>One record</h3><p><code>RunEvent</code>: kind × phase × part, a span tree any client rebuilds without the framework that made it.</p></div>
-  <div><h3>The log is the bus</h3><p>A structlog channel validates, publishes and forwards; the host's logging is never configured.</p></div>
-  <div><h3>Never blocks</h3><p>Publish returns at once from any thread; a slow sink drops and counts, never slows the run.</p></div>
-  <div><h3>Every backend</h3><p>OTLP spans and logs in GenAI, OpenInference and Langfuse dialects at once; live replay for a canvas.</p></div>
+  <div><h3>One record</h3><p>Every span of a run becomes a <code>RunEvent</code>: what it is, where it sits in the tree, what it carried, what it cost. Backends and clients read the same thing.</p></div>
+  <div><h3>Every backend at once</h3><p>OpenTelemetry spans and logs in the GenAI, OpenInference and Langfuse dialects together — Langfuse, LangSmith, Phoenix, Tempo, any collector.</p></div>
+  <div><h3>A live canvas</h3><p>The agent's graph drawn as declared, lit as it runs, with a picker for every conversation. One line to serve it.</p></div>
+  <div><h3>Never in the way</h3><p>Emitting costs the run ~5 µs. A slow or broken backend drops and counts — it never slows the agent or another backend.</p></div>
 </div>
 
-```bash
-uv add "e-track[langgraph,otel]"
+![The live viewer: the agent's declared graph lit by its run, the calls each node made, and the span tree with every span's input and output](assets/viewer.png)
+
+```python
+tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter())
+
+with tracker.track(thread="t1", config={}) as run:          # one conversation, one run
+    await agent.ainvoke(inputs, run.config)                 # your graph, untouched: the config carries the hook
 ```
 
-[Get started](introduction.md){ .md-button .md-button--primary } [Usage](usage.md){ .md-button }
+[Get started](introduction.md){ .md-button .md-button--primary } [Quickstart](quickstart.md){ .md-button }
