@@ -10,7 +10,7 @@ PACKAGE: Final = Path(__file__).resolve().parents[2] / "src" / "etrack"
 LIMIT: Final = 120
 ### read at collection, never inside a test: the event loop does no file I/O.
 MODULES: Final = [
-    (str(path.relative_to(PACKAGE).with_suffix("")), ast.get_docstring(ast.parse(path.read_text("utf-8"))))
+    (path.relative_to(PACKAGE).with_suffix("").as_posix(), ast.get_docstring(ast.parse(path.read_text("utf-8"))))
     for path in sorted(PACKAGE.rglob("*.py"))
     if "__pycache__" not in path.parts
 ]
