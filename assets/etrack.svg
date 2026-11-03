@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="e-track">
+  <rect width="1024" height="1024" fill="#060c15"/>
+  <g fill="#166b7e">
+    <rect x="37" y="408" width="23"  height="206"/>
+    <rect x="37" y="408" width="120" height="21"/>
+    <rect x="37" y="489" width="103" height="21"/>
+    <rect x="37" y="593" width="120" height="21"/>
+    <rect x="175" y="489" width="103" height="21"/>
+    <rect x="313" y="408" width="120" height="21"/>
+    <rect x="362" y="408" width="21"  height="206"/>
+    <rect x="451" y="408" width="21"  height="206"/>
+    <rect x="451" y="408" width="120" height="21"/>
+    <rect x="451" y="499" width="120" height="21"/>
+    <rect x="550" y="408" width="21"  height="113"/>
+    <rect x="536" y="521" width="35"  height="93"/>
+    <rect x="589" y="408" width="21"  height="206"/>
+    <rect x="688" y="408" width="21"  height="206"/>
+    <rect x="589" y="408" width="120" height="21"/>
+    <rect x="589" y="499" width="120" height="21"/>
+    <rect x="728" y="408" width="120" height="21"/>
+    <rect x="728" y="593" width="120" height="21"/>
+    <rect x="728" y="408" width="21"  height="206"/>
+    <rect x="866" y="408" width="21"  height="206"/>
+    <rect x="887" y="499" width="74"  height="21"/>
+    <rect x="932" y="453" width="29"  height="50"/>
+    <rect x="957" y="408" width="29"  height="50"/>
+    <rect x="932" y="517" width="29"  height="50"/>
+    <rect x="957" y="563" width="29"  height="50"/>
+  </g>
+</svg>

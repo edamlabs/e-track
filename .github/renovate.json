@@ -1,0 +1,107 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "pep621",
+    "docker-compose"
+  ],
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "timezone": "Europe/Madrid",
+  "prConcurrentLimit": 3,
+  "abandonmentThreshold": "1 year",
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on the first day of the month"
+    ],
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "requires-python is a support promise, not a dependency: never bumped by a bot.",
+      "matchDepTypes": [
+        "requires-python"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Python tooling (dependency groups and the build backend): one weekly PR, merges itself on green.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "groupName": "python tooling",
+      "labels": [
+        "tooling"
+      ],
+      "matchDepTypes": [
+        "dependency-groups",
+        "build-system.requires"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Sandbox images (collector, Phoenix) are test infrastructure: one monthly PR, merges itself once the integration tier passes.",
+      "matchManagers": [
+        "docker-compose"
+      ],
+      "groupName": "sandbox images",
+      "schedule": [
+        "before 6am on the first day of the month"
+      ],
+      "labels": [
+        "tooling"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Workflow actions stay pinned by digest; one monthly PR.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions",
+      "pinDigests": true,
+      "schedule": [
+        "before 6am on the first day of the month"
+      ],
+      "labels": [
+        "tooling"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Runtime deps of a library: widen the range, never raise the floor users resolve against.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDepTypes": [
+        "project.dependencies"
+      ],
+      "rangeStrategy": "widen",
+      "labels": [
+        "runtime"
+      ]
+    },
+    {
+      "description": "Runtime patch releases merge themselves once every required check passes.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDepTypes": [
+        "project.dependencies"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true
+    }
+  ],
+  "platformAutomerge": true,
+  "automergeType": "pr"
+}

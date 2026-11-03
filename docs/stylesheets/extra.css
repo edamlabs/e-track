@@ -1,0 +1,17 @@
+:root > * {
+  --md-primary-fg-color: #166b7e;
+  --md-primary-fg-color--light: #2a8091;
+  --md-primary-fg-color--dark: #0e4b57;
+  --md-accent-fg-color: #3a76a8;
+}
+
+.md-typeset h1 { color: var(--md-default-fg-color); }
+
+.rx-hero { text-align: center; padding: 1.5rem 0 0.5rem; }
+.rx-hero img { width: min(560px, 90%); border-radius: 16px; }
+.rx-hero p { font-size: 1.15rem; opacity: 0.85; max-width: 46rem; margin: 1.2rem auto 0; }
+
+.rx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.rx-grid > div { padding: 1rem 1.2rem; border: 1px solid var(--md-default-fg-color--lightest); border-radius: 12px; }
+.rx-grid h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.rx-grid p { margin: 0; font-size: 0.85rem; }
