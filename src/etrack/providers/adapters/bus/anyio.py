@@ -90,10 +90,25 @@ class AnyioAdapter:
 
     async def _open_supervise(self, feed: MemoryObjectReceiveStream[Subscription], opened: asyncio.Event) -> None:
         ### the supervisor owns the group from its own task: it ends when the feed closes and the workers have drained.
-        async with anyio.create_task_group() as group, feed:
+        ### the feed is entered first: a group that cannot be created still leaves it closed.
+        async with feed, anyio.create_task_group() as group:
             opened.set()
             async for sub in feed:
                 group.start_soon(self._subscribe_serve, sub)
+
+    async def _enter_opened(self, supervisor: asyncio.Task[None], opened: asyncio.Event) -> None:
+        ### whichever comes first: the group opened, or the supervisor ended without opening it — never a hang.
+        waiter = asyncio.ensure_future(opened.wait())
+        await asyncio.wait({supervisor, waiter}, return_when=asyncio.FIRST_COMPLETED)
+        waiter.cancel()
+        match opened.is_set():
+            case True:
+                return
+            case _:
+                _ = self._feed and self._feed.close()
+                self._feed = self._loop = self._thread = self._supervisor = None
+                msg = "AnyioAdapter: the supervisor ended before the bus opened"
+                raise BusError(msg) from supervisor.exception()
 
     async def _subscribe_serve(self, sub: Subscription) -> None:
         ### a worker is a loop by nature, alive as long as its stream: a comprehension would keep one item per event.
@@ -138,7 +153,7 @@ class AnyioAdapter:
         self._feed = send
         opened = asyncio.Event()
         self._supervisor = asyncio.create_task(self._open_supervise(feed, opened))
-        await opened.wait()
+        await self._enter_opened(self._supervisor, opened)
         logger.info("bus opened", sinks=[sub.name for sub in self._subs], capacity=self._common_capacity)
         return self
 
@@ -157,8 +172,8 @@ class AnyioAdapter:
                 return
 
     async def health(self) -> bool:
-        """Open: the workers run and publish is accepted."""
-        return self._supervisor is not None
+        """Open: the supervisor still runs its workers and publish is accepted."""
+        return self._supervisor is not None and not self._supervisor.done()
 
     def subscribe(self, sink: SinkPort, select: Select | None = None) -> None:
         """A sink served from now on, through `select` when given; named by its spec, numbered when repeated."""

@@ -36,6 +36,10 @@ class BusError(AdapterError):
     """The bus is not open, or was asked to deliver through a closed stream."""
 
 
+class ServerError(AdapterError):
+    """A server that did not answer on its address, or stopped before it did."""
+
+
 class SourceError(AdapterError):
     """A source that cannot bind a run: the host's config is not of the shape its framework takes."""
 

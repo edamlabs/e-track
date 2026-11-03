@@ -1,11 +1,13 @@
 """tests/unit/etrack/providers/adapters/sink/live: per-thread replay by offset, live push, lag cut-off, eviction."""
 
+from datetime import UTC, datetime, timedelta
+
 import anyio
 import pytest
 
 from etrack.infra.config.providers.adapters.sink.live import LiveSettings
-from etrack.ports.sink import SinkPort
-from etrack.providers.adapters.sink.live import LiveAdapter, LiveFrame
+from etrack.ports.sink import LiveFrame, SinkPort, WatchPort
+from etrack.providers.adapters.sink.live import LiveAdapter
 from unit.etrack.conftest import frame
 
 
@@ -22,6 +24,7 @@ async def take(live: LiveAdapter, thread: str, after: int, count: int) -> list[L
 async def test_live_meets_port() -> None:
     async with LiveAdapter() as live:
         assert isinstance(live, SinkPort)
+        assert isinstance(live, WatchPort)
         assert await live.health()
 
 
@@ -86,3 +89,22 @@ async def test_live_exit_closes_watchers() -> None:
     assert (await anext(watcher)).offset == 0
     await live.__aexit__(None, None, None)
     assert [each async for each in watcher] == []
+
+
+async def test_live_threads_newest_first() -> None:
+    from_ = datetime(2026, 11, 3, 12, tzinfo=UTC)
+    async with LiveAdapter() as live:
+        await live.send(frame(0, thread_id="old", run_id="r1", at=from_))
+        await live.send(frame(1, thread_id="old", run_id="r2", at=from_ + timedelta(seconds=1)))
+        await live.send(frame(0, thread_id="new", at=from_ + timedelta(seconds=5)))
+        ### a thread only watched, never written, is not offered.
+        _ = live._common_thread("watched")
+        listed = live.threads()
+    assert [summary.thread for summary in listed] == ["new", "old"]
+    assert listed[1].runs == ("r1", "r2")
+    assert listed[1].offset == 2
+    assert listed[0].last == from_ + timedelta(seconds=5)
+
+
+async def test_live_threads_empty() -> None:
+    assert LiveAdapter().threads() == ()

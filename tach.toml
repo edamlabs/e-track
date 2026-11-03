@@ -17,7 +17,12 @@ unused_ignore_directives = "error"
 ### the public surface: the tracker composes a fold over the channel and a source port.
 [[modules]]
 path = "etrack.logic"
-depends_on = ["etrack.processors", "etrack.ports", "etrack.models", "etrack.infra", "etrack.infra.errors"]
+depends_on = ["etrack.api", "etrack.processors", "etrack.ports", "etrack.models", "etrack.infra", "etrack.infra.errors"]
+
+### the doors over HTTP: they speak the contracts, never a provider, a processor or the surface above them.
+[[modules]]
+path = "etrack.api"
+depends_on = ["etrack.ports", "etrack.models", "etrack.infra", "etrack.infra.errors"]
 
 ### the execution level: each stands on ports, models, infra and ops; none lists another.
 [[modules]]

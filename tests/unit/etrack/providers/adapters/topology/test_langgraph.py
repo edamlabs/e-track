@@ -51,3 +51,25 @@ async def test_langgraph_deep_agent_nodes() -> None:
 async def test_langgraph_rejects_non_graph() -> None:
     with pytest.raises(SourceError, match="not a compiled graph"):
         LanggraphTopologyAdapter().read(object())
+
+
+async def test_langgraph_reads_the_json_export_like_the_graph() -> None:
+    graph = looped()
+    exported = LanggraphTopologyAdapter().read(graph.get_graph(xray=True).to_json())
+    assert exported == LanggraphTopologyAdapter().read(graph)
+
+
+async def test_langgraph_json_names() -> None:
+    topology = LanggraphTopologyAdapter().read(
+        {
+            "nodes": [{"id": "a", "data": {"name": "agent"}}, {"id": "b", "data": "bare"}, {"id": "c"}],
+            "edges": [{"source": "a", "target": "b", "data": "go", "conditional": True}],
+        }
+    )
+    assert [node.name for node in topology.nodes] == ["agent", "bare", "c"]
+    assert topology.edges[0].label == "go"
+
+
+async def test_langgraph_rejects_foreign_json() -> None:
+    with pytest.raises(SourceError, match=r"not the JSON of Graph\.to_json\(\)"):
+        LanggraphTopologyAdapter().read({"nodes": "nope"})

@@ -127,6 +127,30 @@ async def test_anyio_health() -> None:
     assert not await bus.health()
 
 
+async def test_anyio_health_supervisor_dead() -> None:
+    async with AnyioAdapter() as bus:
+        supervisor = bus._supervisor
+        assert supervisor is not None
+        supervisor.cancel()
+        await asyncio.wait({supervisor})
+        assert not await bus.health()
+        ### the dead supervisor is the exit's to report: closing re-raises its cancellation.
+        with pytest.raises(asyncio.CancelledError):
+            await bus.__aexit__(None, None, None)
+
+
+async def test_anyio_enter_supervisor_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse() -> None:
+        msg = "no group"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(anyio, "create_task_group", refuse)
+    bus = AnyioAdapter()
+    with pytest.raises(BusError, match="before the bus opened"):
+        await bus.__aenter__()
+    assert not await bus.health()
+
+
 async def test_anyio_exit_twice() -> None:
     bus = AnyioAdapter()
     await bus.__aexit__(None, None, None)
