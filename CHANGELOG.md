@@ -4,6 +4,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-11-03
+
 ### Fixed
 
 - `AnyioAdapter` no longer ties its task group to the task that opened it: a supervisor task owns the group, so the bus
