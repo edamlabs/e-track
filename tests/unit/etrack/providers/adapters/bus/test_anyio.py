@@ -1,5 +1,6 @@
 """tests/unit/etrack/providers/adapters/bus/anyio: fan-out — order, isolation, drops, selects, threads, drain."""
 
+import asyncio
 import threading
 import time
 from typing import ClassVar
@@ -130,3 +131,21 @@ async def test_anyio_exit_twice() -> None:
     bus = AnyioAdapter()
     await bus.__aexit__(None, None, None)
     assert bus.dropped == {}
+
+
+async def test_anyio_enter_exit_in_different_tasks(recording: RecordingSink) -> None:
+    bus = AnyioAdapter()
+    bus.subscribe(recording)
+    await asyncio.create_task(bus.__aenter__())
+    _ = [bus.publish(frame(seq)) for seq in range(20)]
+    await asyncio.create_task(bus.__aexit__(None, None, None))
+    assert [view.seq for view in recording.views] == list(range(20))  # ty: ignore[unresolved-attribute]
+    assert not await bus.health()
+
+
+async def test_anyio_subscribe_from_foreign_thread(recording: RecordingSink) -> None:
+    async with AnyioAdapter() as bus:
+        await anyio.to_thread.run_sync(bus.subscribe, recording)
+        await anyio.sleep(0.01)
+        bus.publish(frame())
+    assert len(recording.views) == 1
