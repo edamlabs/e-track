@@ -4,6 +4,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-03
+
 ### Added
 
 - Labels: `TopologyNode.label`, the name people read on the canvas — declared with the node
