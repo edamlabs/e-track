@@ -1,7 +1,7 @@
 """tests/unit/etrack/providers/adapters/source/langgraph: real LangGraph runs — plain, deep agent, subgraph, interrupt."""
 
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from deepagents import create_deep_agent
@@ -14,7 +14,6 @@ from langchain_core.retrievers import BaseRetriever
 
 ### LangGraph reads a node's `config: RunnableConfig` annotation at runtime to decide what to pass it.
 from langchain_core.runnables import RunnableConfig  # noqa: TC002
-from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import ParentCommand
 from langgraph.graph import END, START, MessagesState
@@ -25,44 +24,13 @@ from etrack.models.event import EventKind, EventPhase, Failure, Part, RunEvent, 
 from etrack.ports.source import SourcePort
 from etrack.processors.fold import FoldProcessor
 from etrack.providers.adapters.source.langgraph import LanggraphHandler, LanggraphSourceAdapter
+from support.events import by, kinds, lineage
 from support.graph import state_graph
 from support.model import ScriptedModel, call, script, think
 from unit.etrack.conftest import RUN
 
-SCOPE = RunScope(run_id=RUN, thread_id="t1")
-
-
-##### HELPERS #####
-def bound(
-    source: LanggraphSourceAdapter, config: RunnableConfig | None = None
-) -> tuple[list[RunEvent], RunnableConfig]:
-    emitted: list[RunEvent] = []
-    fold = FoldProcessor(SCOPE, emitted.append)
-    return emitted, source.bind(fold, SCOPE, config or {})
-
-
-def agent_graph(model: ScriptedModel) -> Any:
-    async def agent(state: MessagesState) -> dict[str, Any]:
-        return {"messages": [await model.ainvoke(state["messages"])]}
-
-    graph = state_graph(MessagesState)
-    graph.add_node("agent", agent)
-    graph.add_edge(START, "agent")
-    graph.add_edge("agent", END)
-    return graph.compile()
-
-
-def lineage(spans: dict[str, RunEvent], span: str) -> list[EventKind]:
-    """The kinds from a span up to the root."""
-    return [spans[span].kind, *lineage(spans, spans[span].parent)] if span else []
-
-
-def kinds(emitted: list[RunEvent], phase: EventPhase = EventPhase.START) -> list[tuple[EventKind, str]]:
-    return [(event.kind, event.name) for event in emitted if event.phase is phase]
-
-
-def by(emitted: list[RunEvent], kind: EventKind, phase: EventPhase) -> list[RunEvent]:
-    return [event for event in emitted if event.kind is kind and event.phase is phase]
+if TYPE_CHECKING:
+    from unit.etrack.providers.adapters.source.conftest import AgentGraph, Bound
 
 
 ##### LIFECYCLE #####
@@ -82,7 +50,7 @@ async def test_langgraph_hex_none() -> None:
     [(None, 1), ([BaseCallbackHandler()], 2)],
     ids=["none", "list"],
 )
-async def test_langgraph_bind_callbacks(callbacks: list[Any] | None, count: int) -> None:
+async def test_langgraph_bind_callbacks(callbacks: list[Any] | None, count: int, bound: Bound) -> None:
     _, config = bound(LanggraphSourceAdapter(), {"callbacks": callbacks, "metadata": {"app": "x"}})
     assert len(config["callbacks"]) == count  # ty: ignore[invalid-argument-type]
     assert isinstance(config["callbacks"][-1], LanggraphHandler)  # ty: ignore[not-subscriptable]
@@ -90,7 +58,7 @@ async def test_langgraph_bind_callbacks(callbacks: list[Any] | None, count: int)
     assert config["metadata"] == {"app": "x", "etrack_run_id": RUN, "etrack_thread_id": "t1"}
 
 
-async def test_langgraph_bind_manager_kept() -> None:
+async def test_langgraph_bind_manager_kept(bound: Bound) -> None:
     inherited = BaseCallbackHandler()
     manager = AsyncCallbackManager(handlers=[inherited])
     _, config = bound(LanggraphSourceAdapter(), {"callbacks": manager})
@@ -102,13 +70,13 @@ async def test_langgraph_bind_manager_kept() -> None:
     assert len(manager.handlers) == 1
 
 
-async def test_langgraph_bind_rejects() -> None:
+async def test_langgraph_bind_rejects(bound: Bound) -> None:
     with pytest.raises(SourceError, match="list or a manager"):
         bound(LanggraphSourceAdapter(), {"callbacks": "nope"})  # ty: ignore[invalid-argument-type]
 
 
 ##### PLAIN GRAPH #####
-async def test_langgraph_plain_run() -> None:
+async def test_langgraph_plain_run(bound: Bound, agent_graph: AgentGraph) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     await agent_graph(script("hola mundo")).ainvoke({"messages": [("user", "hi")]}, config)
     assert kinds(emitted) == [(EventKind.RUN, "LangGraph"), (EventKind.NODE, "agent"), (EventKind.LLM, "ScriptedModel")]
@@ -120,7 +88,7 @@ async def test_langgraph_plain_run() -> None:
     assert [event.seq for event in emitted] == list(range(len(emitted)))
 
 
-async def test_langgraph_lifts_app_metadata() -> None:
+async def test_langgraph_lifts_app_metadata(bound: Bound, agent_graph: AgentGraph) -> None:
     emitted, config = bound(LanggraphSourceAdapter(), {"metadata": {"app.agents": {"insurance": "v1"}, "other": 1}})
     await agent_graph(script("hola")).ainvoke({"messages": [("user", "hi")]}, config)
     root, node = emitted[0], by(emitted, EventKind.NODE, EventPhase.START)[0]
@@ -129,7 +97,7 @@ async def test_langgraph_lifts_app_metadata() -> None:
     assert by(emitted, EventKind.RUN, EventPhase.END)[0].attributes == {"app.agents": {"insurance": "v1"}}
 
 
-async def test_langgraph_text_deltas() -> None:
+async def test_langgraph_text_deltas(bound: Bound, agent_graph: AgentGraph) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     await agent_graph(script("hola mundo")).ainvoke({"messages": [("user", "hi")]}, config, stream_mode="messages")
     deltas = by(emitted, EventKind.LLM, EventPhase.DELTA)
@@ -137,7 +105,7 @@ async def test_langgraph_text_deltas() -> None:
     assert deltas[0].message_id == deltas[0].id
 
 
-async def test_langgraph_reasoning_and_usage() -> None:
+async def test_langgraph_reasoning_and_usage(bound: Bound, agent_graph: AgentGraph) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     turn = think("primero pienso", "luego digo", input_tokens=3, output_tokens=5, total_tokens=8)
     await agent_graph(script(turn)).ainvoke({"messages": [("user", "hi")]}, config, stream_mode="messages")
@@ -151,7 +119,7 @@ async def test_langgraph_reasoning_and_usage() -> None:
     assert end.usage == Usage(input_tokens=3, output_tokens=5, total_tokens=8)
 
 
-async def test_langgraph_model_ref() -> None:
+async def test_langgraph_model_ref(bound: Bound, agent_graph: AgentGraph) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     await agent_graph(script("ok")).ainvoke({"messages": [("user", "hi")]}, config)
     start = by(emitted, EventKind.LLM, EventPhase.START)[0]
@@ -160,7 +128,7 @@ async def test_langgraph_model_ref() -> None:
     assert start.payload["input"] == [{"role": "human", "content": "hi"}]
 
 
-async def test_langgraph_node_error() -> None:
+async def test_langgraph_node_error(bound: Bound) -> None:
     def broken(state: MessagesState) -> dict[str, Any]:
         msg = "bad input"
         raise ValueError(msg)
@@ -176,7 +144,7 @@ async def test_langgraph_node_error() -> None:
     assert failed[0].error == Failure(type="ValueError", message="bad input")
 
 
-async def test_langgraph_loop_visits() -> None:
+async def test_langgraph_loop_visits(bound: Bound) -> None:
     def tick(state: dict[str, int]) -> dict[str, int]:
         return {"n": state["n"] + 1}
 
@@ -193,7 +161,7 @@ async def test_langgraph_loop_visits() -> None:
     assert [(event.visit, event.step) for event in starts] == [(1, 1), (2, 2), (3, 3)]
 
 
-async def test_langgraph_subgraph_one_span() -> None:
+async def test_langgraph_subgraph_one_span(bound: Bound, agent_graph: AgentGraph) -> None:
     inner = agent_graph(script("dentro"))
     outer = state_graph(MessagesState)
     outer.add_node("agent", inner)
@@ -207,7 +175,7 @@ async def test_langgraph_subgraph_one_span() -> None:
 
 
 ##### INTERRUPT #####
-async def test_langgraph_interrupt_and_resume() -> None:
+async def test_langgraph_interrupt_and_resume(bound: Bound) -> None:
     def ask(state: MessagesState) -> dict[str, Any]:
         answer = interrupt({"q": "¿apruebas?"})
         return {"messages": [("ai", f"dijiste {answer}")]}
@@ -229,7 +197,7 @@ async def test_langgraph_interrupt_and_resume() -> None:
     assert by(resumed, EventKind.NODE, EventPhase.END)
 
 
-async def test_langgraph_nested_interrupt_once() -> None:
+async def test_langgraph_nested_interrupt_once(bound: Bound) -> None:
     def ask(state: MessagesState) -> dict[str, Any]:
         interrupt({"q": "?"})
         return {}
@@ -248,7 +216,7 @@ async def test_langgraph_nested_interrupt_once() -> None:
 
 
 ##### FAILURES #####
-async def test_langgraph_llm_error() -> None:
+async def test_langgraph_llm_error(bound: Bound) -> None:
     class Down(ScriptedModel):
         def _generate(self, *args: Any, **kwargs: Any) -> Any:
             msg = "quota"
@@ -261,7 +229,7 @@ async def test_langgraph_llm_error() -> None:
     assert (failed.kind, failed.error) == (EventKind.LLM, Failure(type="RuntimeError", message="quota"))
 
 
-async def test_langgraph_retriever_error() -> None:
+async def test_langgraph_retriever_error(bound: Bound) -> None:
     class Down(BaseRetriever):
         def _get_relevant_documents(self, query: str, *, run_manager: Any) -> list[Document]:
             msg = "index gone"
@@ -275,8 +243,7 @@ async def test_langgraph_retriever_error() -> None:
 
 
 ##### TOOLS, RETRIEVERS, CUSTOM #####
-async def test_langgraph_deep_agent_subagent_and_mcp() -> None:
-    @tool
+async def test_langgraph_deep_agent_subagent_and_mcp(bound: Bound) -> None:
     def onto_query(query: str) -> str:
         """Run a SPARQL query."""
         return "seg:Poliza"
@@ -308,8 +275,7 @@ async def test_langgraph_deep_agent_subagent_and_mcp() -> None:
     assert [call["id"] for end in ends for call in end.payload["tool_calls"]] == ["c1", "c2"]
 
 
-async def test_langgraph_parallel_tools() -> None:
-    @tool
+async def test_langgraph_parallel_tools(bound: Bound) -> None:
     def poliza(name: str) -> str:
         """Read a policy."""
         return name
@@ -335,8 +301,7 @@ async def test_langgraph_parallel_tools() -> None:
     assert sorted(event.payload["output"] for event in ends) == ["pol-1", "pol-2"]
 
 
-async def test_langgraph_tool_error() -> None:
-    @tool
+async def test_langgraph_tool_error(bound: Bound) -> None:
     def falla(x: int) -> str:
         """Always fails."""
         msg = "no"
@@ -350,7 +315,7 @@ async def test_langgraph_tool_error() -> None:
     assert failed.error == Failure(type="RuntimeError", message="no")
 
 
-async def test_langgraph_retriever() -> None:
+async def test_langgraph_retriever(bound: Bound) -> None:
     class Fixed(BaseRetriever):
         def _get_relevant_documents(self, query: str, *, run_manager: Any) -> list[Document]:
             return [Document(page_content="póliza", metadata={"id": 1})]
@@ -370,7 +335,7 @@ async def test_langgraph_retriever() -> None:
     assert end.payload == {"documents": [{"content": "póliza", "metadata": {"id": 1}}]}
 
 
-async def test_langgraph_custom_event() -> None:
+async def test_langgraph_custom_event(bound: Bound) -> None:
     async def gate(state: MessagesState, config: RunnableConfig) -> dict[str, Any]:
         await adispatch_custom_event("verdict", {"conforms": False}, config=config)
         return {}
@@ -390,7 +355,7 @@ async def test_langgraph_custom_event() -> None:
     )
 
 
-async def test_langgraph_plain_llm() -> None:
+async def test_langgraph_plain_llm(bound: Bound) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     await FakeListLLM(responses=["texto"]).ainvoke("prompt", config)
     assert kinds(emitted) == [(EventKind.LLM, "FakeListLLM")]
@@ -398,7 +363,7 @@ async def test_langgraph_plain_llm() -> None:
     assert by(emitted, EventKind.LLM, EventPhase.START)[0].payload == {"input": ["prompt"]}
 
 
-async def test_langgraph_sync_invoke() -> None:
+async def test_langgraph_sync_invoke(bound: Bound) -> None:
     emitted, config = bound(LanggraphSourceAdapter())
     model = script("sincrono")
 
@@ -452,9 +417,9 @@ async def test_langgraph_usage_absent() -> None:
     assert LanggraphHandler._llm_usage(object()) is None
 
 
-async def test_langgraph_bubble_up_not_failure() -> None:
+async def test_langgraph_bubble_up_not_failure(scope: RunScope) -> None:
     emitted: list[RunEvent] = []
-    fold = FoldProcessor(SCOPE, emitted.append)
+    fold = FoldProcessor(scope, emitted.append)
     handler = LanggraphHandler(fold, frozenset(), frozenset())
     run = uuid.UUID(RUN)
     handler.on_chain_start({}, {}, run_id=run, name="root")

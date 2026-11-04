@@ -13,39 +13,36 @@ from etrack.ops.file import FileFinder, Kind
 if TYPE_CHECKING:
     from pathlib import Path
 
-INFRA = FileFinder("etrack.infra")
-CONFIG = FileFinder("etrack.infra.config", recursive=True)
+
+async def test_file_modules_skip_packages(infra: FileFinder) -> None:
+    assert {"errors", "logger", "proxy", "settings"} <= set(infra.discover(Kind.MODULES))
+    assert "config" not in infra.discover(Kind.MODULES)
 
 
-async def test_file_modules_skip_packages() -> None:
-    assert {"errors", "logger", "proxy", "settings"} <= set(INFRA.discover(Kind.MODULES))
-    assert "config" not in INFRA.discover(Kind.MODULES)
+async def test_file_recursive_names_by_path(config: FileFinder) -> None:
+    assert "providers.drivers.sink.otlp" in config.discover(Kind.MODULES)
 
 
-async def test_file_recursive_names_by_path() -> None:
-    assert "providers.drivers.sink.otlp" in CONFIG.discover(Kind.MODULES)
-
-
-async def test_file_classes_and_functions_own_only() -> None:
-    assert "LazyProxy" in INFRA.discover(Kind.CLASSES)
-    assert "Any" not in INFRA.discover(Kind.CLASSES)
+async def test_file_classes_and_functions_own_only(infra: FileFinder) -> None:
+    assert "LazyProxy" in infra.discover(Kind.CLASSES)
+    assert "Any" not in infra.discover(Kind.CLASSES)
     assert FileFinder("etrack.ops").discover(Kind.FUNCTIONS).keys() >= {"w3c_trace", "w3c_span"}
 
 
-async def test_file_base_and_pattern() -> None:
-    found = CONFIG.discover(BaseSettings, pattern=re.compile(r"^Otlp"))
+async def test_file_base_and_pattern(config: FileFinder) -> None:
+    found = config.discover(BaseSettings, pattern=re.compile(r"^Otlp"))
     assert set(found) == {"OtlpSettings"}
-    assert "BaseSettings" not in CONFIG.discover(BaseSettings)
+    assert "BaseSettings" not in config.discover(BaseSettings)
 
 
-async def test_file_predicate_and_module() -> None:
-    assert set(INFRA.discover(proxy)) == {"LazyProxy"}
-    assert "LazyProxy" in INFRA.discover(lambda obj: isinstance(obj, type) and obj.__name__.endswith("Proxy"))
+async def test_file_predicate_and_module(infra: FileFinder) -> None:
+    assert set(infra.discover(proxy)) == {"LazyProxy"}
+    assert "LazyProxy" in infra.discover(lambda obj: isinstance(obj, type) and obj.__name__.endswith("Proxy"))
 
 
-async def test_file_rejects_target() -> None:
+async def test_file_rejects_target(infra: FileFinder) -> None:
     with pytest.raises(FileError, match="Unsupported discover target"):
-        INFRA.discover(cast("Any", 42))
+        infra.discover(cast("Any", 42))
 
 
 async def test_file_private_never_seen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

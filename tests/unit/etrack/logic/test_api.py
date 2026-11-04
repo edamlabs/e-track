@@ -7,34 +7,20 @@ from typing import Any
 import structlog
 from deepagents import create_deep_agent
 from langchain_core.tools import tool
-from langgraph.graph import START, MessagesState
 
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.models.event import EventKind, EventPhase, RunEvent
 from etrack.providers.adapters.bus.anyio import AnyioAdapter
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
-from support.graph import state_graph
 from support.model import call, script
 from unit.etrack.conftest import RUN, Collector, RecordingSink
 
 
-def graph() -> Any:
-    model = script("hola")
-
-    async def agent(state: MessagesState) -> dict[str, Any]:
-        return {"messages": [await model.ainvoke(state["messages"])]}
-
-    built = state_graph(MessagesState)
-    built.add_node("agent", agent)
-    built.add_edge(START, "agent")
-    return built.compile()
-
-
-async def test_tracker_run_frames(collector: Collector) -> None:
+async def test_tracker_run_frames(collector: Collector, graph: Any) -> None:
     tracker = Tracker(EventChannel(collector), LanggraphSourceAdapter())
     with tracker.track("t1", {}) as tracked:
-        await graph().ainvoke({"messages": [("user", "hi")]}, tracked.config)
+        await graph.ainvoke({"messages": [("user", "hi")]}, tracked.config)
     assert collector.events[0].id == tracked.scope.run_id
     assert {event.thread_id for event in collector.events} == {"t1"}
     assert [event.seq for event in collector.events] == list(range(len(collector.events)))
@@ -53,16 +39,16 @@ async def test_tracker_binds_contextvars(collector: Collector) -> None:
     assert "run_id" not in structlog.contextvars.get_contextvars()
 
 
-async def test_tracker_redacts(collector: Collector) -> None:
+async def test_tracker_redacts(collector: Collector, graph: Any) -> None:
     tracker = Tracker(EventChannel(collector), LanggraphSourceAdapter(), redact=lambda payload: {})
     with tracker.track("t1", {}) as tracked:
-        await graph().ainvoke({"messages": [("user", "secret")]}, tracked.config)
+        await graph.ainvoke({"messages": [("user", "secret")]}, tracked.config)
     assert all(event.payload == {} for event in collector.events)
 
 
-async def test_tracker_own_span(collector: Collector) -> None:
+async def test_tracker_own_span(collector: Collector, graph: Any) -> None:
     with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
-        await graph().ainvoke({"messages": [("user", "hi")]}, tracked.config)
+        await graph.ainvoke({"messages": [("user", "hi")]}, tracked.config)
         with tracked.fold.span("gate", kind=EventKind.EVALUATION):
             pass
     gate = [event for event in collector.events if event.kind is EventKind.EVALUATION]

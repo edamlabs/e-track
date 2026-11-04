@@ -1,6 +1,7 @@
 """tests/unit/etrack/providers/adapters/sink/live: per-thread replay by offset, live push, lag cut-off, eviction."""
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import anyio
 import pytest
@@ -10,15 +11,8 @@ from etrack.ports.sink import LiveFrame, SinkPort, WatchPort
 from etrack.providers.adapters.sink.live import LiveAdapter
 from unit.etrack.conftest import frame
 
-
-async def take(live: LiveAdapter, thread: str, after: int, count: int) -> list[LiveFrame]:
-    seen: list[LiveFrame] = []
-    with anyio.fail_after(1):
-        async for each in live.watch(thread, after):
-            seen.append(each)
-            if len(seen) == count:
-                break
-    return seen
+if TYPE_CHECKING:
+    from unit.etrack.providers.adapters.sink.conftest import Take
 
 
 async def test_live_meets_port() -> None:
@@ -35,14 +29,14 @@ async def test_live_offsets_per_thread() -> None:
 
 
 @pytest.mark.parametrize(("after", "expected"), [(-1, [0, 1, 2]), (0, [1, 2]), (2, [])], ids=["all", "past", "none"])
-async def test_live_replay(after: int, expected: list[int]) -> None:
+async def test_live_replay(after: int, expected: list[int], take: Take) -> None:
     live = LiveAdapter()
     _ = [await live.send(frame(seq)) for seq in range(3)]
     seen = await take(live, "t1", after, len(expected)) if expected else []
     assert [each.offset for each in seen] == expected
 
 
-async def test_live_replay_then_follow() -> None:
+async def test_live_replay_then_follow(take: Take) -> None:
     live = LiveAdapter()
     await live.send(frame(0))
     seen: list[LiveFrame] = []
@@ -58,7 +52,7 @@ async def test_live_replay_then_follow() -> None:
     assert [each.event.seq for each in seen] == [0, 1, 2]
 
 
-async def test_live_buffer_bounded() -> None:
+async def test_live_buffer_bounded(take: Take) -> None:
     live = LiveAdapter(LiveSettings(buffer=2))
     _ = [await live.send(frame(seq)) for seq in range(5)]
     assert [each.offset for each in await take(live, "t1", -1, 2)] == [3, 4]
