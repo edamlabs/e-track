@@ -33,8 +33,8 @@ An LLM call's `end` frame, as a sink receives it (the values are illustrative; t
   "latency_ms": 812.4,
   "model": {"provider": "openai", "name": "gpt-5", "params": {"temperature": 0}},
   "usage": {
-    "input_tokens": 1840, "output_tokens": 96, "total_tokens": 1936,
-    "reasoning_tokens": 0, "cache_read_tokens": 1536, "cache_write_tokens": 0, "cost_usd": null
+    "input_tokens": 1840, "output_tokens": 96, "total_tokens": 1936, "reasoning_tokens": 0,
+    "cache_read_tokens": 1536, "cache_write_tokens": 0, "cost_usd": null
   },
   "error": null,
   "payload": {"text": "Una póliza es seg:Poliza.", "reasoning": "", "tool_calls": []},
@@ -114,7 +114,8 @@ class Cost(EventView, frozen=True, kw_only=True):
     usage: Usage | None = None
 
 
-cost = Cost.project(event)        # every other field left behind
+# every other field left behind
+cost = Cost.project(event)
 ```
 
 A sink declares its view once (`view: ClassVar = Cost`) and the bus narrows each event before handing it over.
@@ -125,6 +126,6 @@ A sink declares its view once (`view: ClassVar = Cost`) and the bus narrows each
 Two ways, neither breaks a reader:
 
 - **The `attributes` bag**, namespaced by its owner: put the run's own facts under `app.` in your LangGraph
-  config's metadata and they land on the root span (→ [Tracking runs](tracking.md)).
+  config's metadata and they land on the root span (→ [LangGraph](../integrations/langgraph.md#the-runs-own-facts)).
 - **A subclass**: `class MyEvent(RunEvent, frozen=True, kw_only=True): tenant: str = ""`, handed to
   `EventChannel(bus, model=MyEvent)` — every frame is validated into it.

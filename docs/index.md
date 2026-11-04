@@ -25,8 +25,10 @@ Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs fami
 ```python
 tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter())
 
-with tracker.track(thread="t1", config={}) as run:          # one conversation, one run
-    await agent.ainvoke(inputs, run.config)                 # your graph, untouched: the config carries the hook
+# one conversation, one run
+with tracker.track(thread="t1", config={}) as run:
+    # your graph, untouched: the config carries the hook
+    await agent.ainvoke(inputs, run.config)
 ```
 
-[Get started](introduction.md){ .md-button .md-button--primary } [Quickstart](quickstart.md){ .md-button }
+[What it is](start/introduction.md){ .md-button } [Run it in 3 steps](start/quickstart.md){ .md-button .md-button--primary } [API at a glance](reference/api.md){ .md-button }

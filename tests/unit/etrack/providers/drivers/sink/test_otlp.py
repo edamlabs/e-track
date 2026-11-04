@@ -7,76 +7,36 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
-from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
 from etrack.infra.config.base import Secret
 from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
 from etrack.infra.errors import SinkError
-from etrack.models.event import EventKind, EventPhase, Failure, ModelRef, Part, Usage
+from etrack.models.event import EventKind, EventPhase, Failure, Part, Usage
 from etrack.ports.sink import SinkPort
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 from support.collector import fake_collector
 from unit.etrack.conftest import RUN, frame
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
     from pytest_httpserver import HTTPServer
-
-ROOT = RUN
-CHILD = "0" * 16 + "a" * 16
-
-
-@pytest.fixture
-def spans() -> InMemorySpanExporter:
-    return InMemorySpanExporter()
-
-
-@pytest.fixture
-def logs() -> InMemoryLogRecordExporter:
-    return InMemoryLogRecordExporter()
-
-
-async def run_tree(driver: OtlpDriver) -> None:
-    await driver.send(frame(0, EventPhase.START, id=ROOT, kind=EventKind.RUN, name="deeptrack"))
-    await driver.send(
-        frame(
-            1,
-            EventPhase.START,
-            id=CHILD,
-            parent=ROOT,
-            kind=EventKind.LLM,
-            name="gemini",
-            model=ModelRef(provider="google", name="gemini-2.5-flash", params={"temperature": 0.1}),
-            payload={"input": [{"role": "human", "content": "hi"}]},
-        )
-    )
-    await driver.send(
-        frame(
-            2,
-            EventPhase.END,
-            id=CHILD,
-            parent=ROOT,
-            kind=EventKind.LLM,
-            name="gemini",
-            usage=Usage(input_tokens=3, output_tokens=4, total_tokens=7),
-            payload={"text": "hola"},
-        )
-    )
-    await driver.send(frame(3, EventPhase.END, id=ROOT, kind=EventKind.RUN, name="deeptrack"))
 
 
 async def test_otlp_meets_port(spans: InMemorySpanExporter) -> None:
     assert isinstance(OtlpDriver(span_exporters=[spans]), SinkPort)
 
 
-async def test_otlp_framework_payload_encoded(spans: InMemorySpanExporter) -> None:
+async def test_otlp_framework_payload_encoded(spans: InMemorySpanExporter, root: str) -> None:
     message = ToolMessage("seg:Poliza", tool_call_id="c1")
     async with OtlpDriver(span_exporters=[spans]) as driver:
         await driver.send(
-            frame(0, EventPhase.START, id=ROOT, kind=EventKind.TOOL, name="t", payload={"input": message})
+            frame(0, EventPhase.START, id=root, kind=EventKind.TOOL, name="t", payload={"input": message})
         )
-        await driver.send(frame(1, EventPhase.END, id=ROOT, kind=EventKind.TOOL, name="t", payload={"output": message}))
+        await driver.send(frame(1, EventPhase.END, id=root, kind=EventKind.TOOL, name="t", payload={"output": message}))
     (span,) = spans.get_finished_spans()
     attributes = dict(span.attributes or {})
     assert '"tool_call_id":"c1"' in str(attributes["input.value"])
@@ -87,7 +47,7 @@ async def test_otlp_dataclass_payload_encoded() -> None:
     assert '"goto":"gate"' in str(OtlpDriver._common_flat(Command(goto="gate")))
 
 
-async def test_otlp_ids_derived(spans: InMemorySpanExporter) -> None:
+async def test_otlp_ids_derived(spans: InMemorySpanExporter, run_tree: Callable[[OtlpDriver], Awaitable[None]]) -> None:
     async with OtlpDriver(span_exporters=[spans]) as driver:
         await run_tree(driver)
     finished = {span.name: span for span in spans.get_finished_spans()}
@@ -97,7 +57,7 @@ async def test_otlp_ids_derived(spans: InMemorySpanExporter) -> None:
     assert finished["gemini"].parent.span_id == finished["deeptrack"].context.span_id
 
 
-async def test_otlp_dialects(spans: InMemorySpanExporter) -> None:
+async def test_otlp_dialects(spans: InMemorySpanExporter, run_tree: Callable[[OtlpDriver], Awaitable[None]]) -> None:
     async with OtlpDriver(span_exporters=[spans]) as driver:
         await run_tree(driver)
     llm = {span.name: span for span in spans.get_finished_spans()}["gemini"]
@@ -115,12 +75,11 @@ async def test_otlp_dialects(spans: InMemorySpanExporter) -> None:
     assert llm.status.status_code is StatusCode.OK
 
 
-async def test_otlp_usage_buckets(spans: InMemorySpanExporter) -> None:
-    ### the source's totals include the cached input and the reasoning output: Langfuse prices each bucket apart.
+async def test_otlp_usage_buckets(spans: InMemorySpanExporter, root: str) -> None:
     usage = Usage(input_tokens=2494, output_tokens=129, total_tokens=2623, reasoning_tokens=87, cache_read_tokens=1752)
     async with OtlpDriver(span_exporters=[spans]) as driver:
-        await driver.send(frame(0, EventPhase.START, id=ROOT, kind=EventKind.LLM, name="gemini"))
-        await driver.send(frame(1, EventPhase.END, id=ROOT, kind=EventKind.LLM, name="gemini", usage=usage))
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.LLM, name="gemini"))
+        await driver.send(frame(1, EventPhase.END, id=root, kind=EventKind.LLM, name="gemini", usage=usage))
     (span,) = spans.get_finished_spans()
     attributes = dict(span.attributes or {})
     assert json.loads(str(attributes["langfuse.observation.usage_details"])) == {
@@ -134,14 +93,14 @@ async def test_otlp_usage_buckets(spans: InMemorySpanExporter) -> None:
     assert attributes["gen_ai.usage.input_tokens"] == 2494
 
 
-async def test_otlp_error_status(spans: InMemorySpanExporter) -> None:
+async def test_otlp_error_status(spans: InMemorySpanExporter, root: str) -> None:
     async with OtlpDriver(span_exporters=[spans]) as driver:
-        await driver.send(frame(0, EventPhase.START, id=ROOT, kind=EventKind.TOOL, name="t"))
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.TOOL, name="t"))
         await driver.send(
             frame(
                 1,
                 EventPhase.ERROR,
-                id=ROOT,
+                id=root,
                 kind=EventKind.TOOL,
                 name="t",
                 error=Failure(type="ValueError", message="x"),
@@ -152,13 +111,13 @@ async def test_otlp_error_status(spans: InMemorySpanExporter) -> None:
     assert dict(span.attributes or {})["exception.type"] == "ValueError"
 
 
-async def test_otlp_instant_under_closed_parent(spans: InMemorySpanExporter) -> None:
+async def test_otlp_instant_under_closed_parent(spans: InMemorySpanExporter, root: str, child: str) -> None:
     async with OtlpDriver(span_exporters=[spans]) as driver:
-        await driver.send(frame(0, EventPhase.START, id=ROOT, kind=EventKind.RUN, name="run"))
-        await driver.send(frame(1, EventPhase.START, id=CHILD, parent=ROOT, name="ask"))
-        await driver.send(frame(2, EventPhase.END, id=CHILD, parent=ROOT, name="ask"))
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run"))
+        await driver.send(frame(1, EventPhase.START, id=child, parent=root, name="ask"))
+        await driver.send(frame(2, EventPhase.END, id=child, parent=root, name="ask"))
         await driver.send(
-            frame(3, EventPhase.INSTANT, id="stop", parent=CHILD, kind=EventKind.INTERRUPT, name="interrupt")
+            frame(3, EventPhase.INSTANT, id="stop", parent=child, kind=EventKind.INTERRUPT, name="interrupt")
         )
     finished = {span.name: span for span in spans.get_finished_spans()}
     assert finished["interrupt"].parent is not None
@@ -167,13 +126,15 @@ async def test_otlp_instant_under_closed_parent(spans: InMemorySpanExporter) -> 
     assert "run" in finished
 
 
-async def test_otlp_traces_off(spans: InMemorySpanExporter) -> None:
+async def test_otlp_traces_off(spans: InMemorySpanExporter, run_tree: Callable[[OtlpDriver], Awaitable[None]]) -> None:
     async with OtlpDriver(OtlpSettings(traces=False), span_exporters=[spans]) as driver:
         await run_tree(driver)
     assert spans.get_finished_spans() == ()
 
 
-async def test_otlp_logs(spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter) -> None:
+async def test_otlp_logs(
+    spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter, run_tree: Callable[[OtlpDriver], Awaitable[None]]
+) -> None:
     async with OtlpDriver(span_exporters=[spans], log_exporters=[logs]) as driver:
         await run_tree(driver)
         assert await driver.flush()
@@ -212,7 +173,9 @@ async def test_otlp_health(spans: InMemorySpanExporter) -> None:
         assert await driver.health()
 
 
-async def test_otlp_remote_fake_collector(httpserver: HTTPServer) -> None:
+async def test_otlp_remote_fake_collector(
+    httpserver: HTTPServer, run_tree: Callable[[OtlpDriver], Awaitable[None]]
+) -> None:
     collector = fake_collector(httpserver)
     target = OtlpTarget(endpoint=f"{collector.endpoint}/", headers={"Authorization": Secret("Basic eA==")})
     settings = OtlpSettings(targets={"fake": target}, logs=True, flush=timedelta(milliseconds=10))
@@ -235,9 +198,11 @@ async def test_otlp_remote_fake_collector(httpserver: HTTPServer) -> None:
     )
 
 
-async def test_otlp_delta_is_logged_not_spanned(spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter) -> None:
+async def test_otlp_delta_is_logged_not_spanned(
+    spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter, root: str
+) -> None:
     async with OtlpDriver(span_exporters=[spans], log_exporters=[logs]) as driver:
-        await driver.send(frame(0, EventPhase.DELTA, id=ROOT, kind=EventKind.LLM, part=Part.TEXT))
+        await driver.send(frame(0, EventPhase.DELTA, id=root, kind=EventKind.LLM, part=Part.TEXT))
         assert await driver.flush()
     assert spans.get_finished_spans() == ()
     assert [data.log_record.event_name for data in logs.get_finished_logs()] == ["etrack.llm.delta"]

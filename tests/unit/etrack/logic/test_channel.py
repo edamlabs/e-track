@@ -13,8 +13,6 @@ from etrack.logic.channel import EVENT, LEVELS, EventChannel
 from etrack.models.event import EventPhase, RunEvent
 from unit.etrack.conftest import RUN, Collector, frame
 
-KEYS: dict[str, Any] = {"run_id": RUN, "seq": 0, "id": "s0", "kind": "node", "phase": "start"}
-
 
 async def test_channel_emit_publishes_as_is(collector: Collector) -> None:
     event = frame()
@@ -22,16 +20,16 @@ async def test_channel_emit_publishes_as_is(collector: Collector) -> None:
     assert collector.events == [event]
 
 
-async def test_channel_log_keys_validated(collector: Collector) -> None:
-    EventChannel(collector).log.info(EVENT, **KEYS)
-    expected = msgspec.convert({**KEYS, "at": collector.events[0].at}, RunEvent)
+async def test_channel_log_keys_validated(collector: Collector, keys: dict[str, Any]) -> None:
+    EventChannel(collector).log.info(EVENT, **keys)
+    expected = msgspec.convert({**keys, "at": collector.events[0].at}, RunEvent)
     assert collector.events[0] == expected
 
 
-async def test_channel_log_contextvars(collector: Collector) -> None:
-    keys = {key: value for key, value in KEYS.items() if key != "run_id"}
+async def test_channel_log_contextvars(collector: Collector, keys: dict[str, Any]) -> None:
+    own = {key: value for key, value in keys.items() if key != "run_id"}
     with structlog.contextvars.bound_contextvars(run_id=RUN, thread_id="t9"):
-        EventChannel(collector).log.info(EVENT, **keys)
+        EventChannel(collector).log.info(EVENT, **own)
     assert (collector.events[0].run_id, collector.events[0].thread_id) == (RUN, "t9")
 
 
@@ -40,18 +38,18 @@ async def test_channel_log_contextvars(collector: Collector) -> None:
     [{"kind": "planet"}, {"seq": "x"}, {"id": None}],
     ids=["kind", "seq", "id"],
 )
-async def test_channel_log_rejects(collector: Collector, broken: dict[str, Any]) -> None:
+async def test_channel_log_rejects(collector: Collector, broken: dict[str, Any], keys: dict[str, Any]) -> None:
     with pytest.raises(ChannelError, match="not a RunEvent"):
-        EventChannel(collector).log.info(EVENT, **{**KEYS, **broken})
+        EventChannel(collector).log.info(EVENT, **{**keys, **broken})
     assert collector.events == []
 
 
-async def test_channel_model_subclass(collector: Collector) -> None:
+async def test_channel_model_subclass(collector: Collector, keys: dict[str, Any]) -> None:
     class AppEvent(RunEvent, frozen=True, kw_only=True):
         tenant: str
 
     channel = EventChannel(collector, model=AppEvent)
-    channel.log.info(EVENT, **KEYS, tenant="acme")
+    channel.log.info(EVENT, **keys, tenant="acme")
     assert channel.model is AppEvent
     assert collector.events[0].tenant == "acme"  # ty: ignore[unresolved-attribute]
 

@@ -1,19 +1,8 @@
 """tests/unit/test_descriptions: every module of etrack opens with one short sentence that starts with its path."""
 
-import ast
-from pathlib import Path
-from typing import Final
-
 import pytest
 
-PACKAGE: Final = Path(__file__).resolve().parents[2] / "src" / "etrack"
-LIMIT: Final = 120
-### read at collection, never inside a test: the event loop does no file I/O.
-MODULES: Final = [
-    (path.relative_to(PACKAGE).with_suffix("").as_posix(), ast.get_docstring(ast.parse(path.read_text("utf-8"))))
-    for path in sorted(PACKAGE.rglob("*.py"))
-    if "__pycache__" not in path.parts
-]
+from support.tree import LIMIT, MODULES
 
 
 @pytest.mark.parametrize(("relpath", "doc"), MODULES, ids=[name for name, _ in MODULES])

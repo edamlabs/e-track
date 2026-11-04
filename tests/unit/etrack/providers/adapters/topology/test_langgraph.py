@@ -13,27 +13,14 @@ from support.graph import state_graph
 from support.model import script
 
 
-def looped() -> Any:
-    def step(state: MessagesState) -> dict[str, Any]:
-        return {}
-
-    graph = state_graph(MessagesState)
-    graph.add_node("agent", step)
-    graph.add_node("gate", step)
-    graph.add_edge(START, "agent")
-    graph.add_edge("agent", "gate")
-    graph.add_conditional_edges("gate", lambda state: END, {"agent": "agent", "end": END})
-    return graph.compile()
-
-
 async def test_langgraph_meets_port() -> None:
     async with LanggraphTopologyAdapter() as adapter:
         assert isinstance(adapter, TopologyPort)
         assert await adapter.health()
 
 
-async def test_langgraph_reads_nodes_and_arcs() -> None:
-    topology = LanggraphTopologyAdapter().read(looped())
+async def test_langgraph_reads_nodes_and_arcs(looped: Any) -> None:
+    topology = LanggraphTopologyAdapter().read(looped)
     assert {node.id for node in topology.nodes} == {"__start__", "agent", "gate", "__end__"}
     entries = [node.id for node in topology.nodes if node.entry]
     exits = [node.id for node in topology.nodes if node.exit]
@@ -53,8 +40,8 @@ async def test_langgraph_rejects_non_graph() -> None:
         LanggraphTopologyAdapter().read(object())
 
 
-async def test_langgraph_reads_the_json_export_like_the_graph() -> None:
-    graph = looped()
+async def test_langgraph_reads_the_json_export_like_the_graph(looped: Any) -> None:
+    graph = looped
     exported = LanggraphTopologyAdapter().read(graph.get_graph(xray=True).to_json())
     assert exported == LanggraphTopologyAdapter().read(graph)
 

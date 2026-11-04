@@ -43,4 +43,4 @@ Within `tracker.track(...)`, structlog's contextvars carry `run_id` and `thread_
 ## Your logs to OpenTelemetry
 
 With the OTLP driver, `otlp.processor()` is a structlog processor that also sends every line of your logger as an
-OpenTelemetry log record, beside the spans. → [Backends](backends.md)
+OpenTelemetry log record, beside the spans. → [OpenTelemetry](../integrations/opentelemetry.md)
