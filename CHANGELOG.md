@@ -4,6 +4,11 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- The package description and keywords say what e-track is now: parallel sinks (OpenTelemetry, Langfuse, Cloud Trace,
+  Prometheus, HTTP) and a live graph viewer — the same text as the repository's About on GitHub.
+
 ## [0.5.0] — 2026-11-04
 
 ### Added
