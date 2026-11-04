@@ -4,6 +4,22 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Authentication as configuration for every driver (TODO_drivers): `Auth` — `none`, `headers`, `bearer`, `basic`,
+  `google` (Application Default Credentials resolved off the loop, the token refreshed off the loop when due, the
+  quota project billed) — signed by one `AuthSigner`; OTLP targets take `auth`, beside their fixed headers.
+- Cloud Trace through the OTLP driver: the Telemetry API (`telemetry.googleapis.com`) ingests OTLP, so a target with
+  `auth: google` is all it takes — verified on the wire against a local server with stand-in credentials. There is no
+  Cloud Trace emulator (the one community mock is archived and speaks Trace v2, not OTLP).
+- `HttpDriver` (`e-track[http]`): events batched to any HTTP endpoint — full batch or `flush` timer, ndjson or json,
+  retries with a doubling backoff on network errors, 408/425/429/5xx, signed by the configured auth — and the base of
+  a custom driver: override `view`, `phases`, `accept`, `encode`, `body`. Documented with a memory service recording
+  recall, and the endpoint contract such a service should expose (a TODO on the service's side).
+- `PrometheusAdapter` (`e-track[prometheus]`): spans counted by kind, name and outcome, latency histograms, runs in
+  flight, tokens by type and cost, in an own registry scraped from a mountable `app`; Grafana reads Prometheus, and
+  Tempo or Grafana Cloud take the traces over OTLP with basic auth.
+
 ## [0.4.0] — 2026-11-04
 
 ### Changed

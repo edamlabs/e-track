@@ -129,3 +129,22 @@ from afar, and the kind is always written beside it.
 
 **Rejected.** Keeping call nodes and only fixing the measures (the graph still reshaped with every call); a refit
 per growth (the view jumped under the reader); a fourth hue from the violet or magenta steps (failed CVD).
+
+### 2026-11-04 · Auth is configuration every driver shares; Cloud Trace is an OTLP target; custom sinks build on HTTP
+
+**Decision.** Authentication is one `Auth` value in a driver's configuration, signed by one `AuthSigner`; Google is a
+kind of auth, not a driver: Cloud Trace is an OTLP target with `auth: google`. A custom sink is a subclass of
+`HttpDriver`, which owns batching, timing, signing and retries; Prometheus is an in-process adapter scraped from an app.
+
+**Evidence.** Google's Telemetry API ingests OTLP at `telemetry.googleapis.com` (docs, 2026-11-04); the OTLP HTTP
+exporter takes a `requests.Session`, and google-auth's `AuthorizedSession` is one that refreshes its token and retries a
+401 — checked in code. The bus already gives every sink a worker, a bounded queue and a `select`: the HTTP driver adds
+only what a remote system needs. Tests: the signer for every kind and for Google's refresh, the OTLP Google target and
+a bearer target on the wire, the HTTP driver against a real local server (batch, timer, retries, refusals, an
+unreachable host, a subclass), Prometheus' samples and its scrape, and a deep agent's run end to end through the bus
+into both; coverage 100 %.
+
+**Rejected.** A Cloud Trace v2 (gRPC `BatchWriteSpans`) driver — OTLP reaches the same store with the driver we have;
+googleinterns/cloud-operations-api-mock as a local fake — archived since 2022, Trace v2 only; a queue and worker inside
+the HTTP driver — the bus already isolates every sink; Pushgateway — Prometheus scrapes, and pushed traces go over
+OTLP. Not measured: a Rust-backed HTTP client (wreq, rnet) against httpx for this driver — open for a benchmark.

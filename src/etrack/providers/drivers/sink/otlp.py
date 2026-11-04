@@ -28,6 +28,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcess
 from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
 from opentelemetry.trace import NonRecordingSpan, SpanContext, Status, StatusCode, TraceFlags
 
+from etrack.infra.auth import AuthSigner
 from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
 from etrack.infra.settings import settings as st
@@ -167,6 +168,7 @@ class OtlpDriver:
         "_logs",
         "_open",
         "_settings",
+        "_signers",
         "_span_exporters",
         "_tracer",
         "_traces",
@@ -179,6 +181,7 @@ class OtlpDriver:
         log_exporters: Sequence[LogRecordExporter] = (),
     ) -> None:
         self._settings = settings
+        self._signers: dict[str, AuthSigner] = {}
         self._span_exporters = tuple(span_exporters)
         self._log_exporters = tuple(log_exporters)
         self._ids = RunIds()
@@ -213,7 +216,8 @@ class OtlpDriver:
 
     def _common_headers(self, name: str) -> dict[str, str]:
         target = self._common_settings.targets[name]
-        return {key: secret.get_secret_value() for key, secret in target.headers.items()}
+        fixed = {key: secret.get_secret_value() for key, secret in target.headers.items()}
+        return {**fixed, **self._signers[name].static()}
 
     def _enter_traces(self, resource: Resource) -> TracerProvider:
         config = self._common_settings
@@ -225,6 +229,7 @@ class OtlpDriver:
                     endpoint=f"{target.endpoint.rstrip('/')}/v1/traces",
                     headers=self._common_headers(name),
                     timeout=timeout,
+                    session=self._signers[name].session(),
                 ),
                 schedule_delay_millis=flush,
             )
@@ -244,6 +249,7 @@ class OtlpDriver:
                     endpoint=f"{target.endpoint.rstrip('/')}/v1/logs",
                     headers=self._common_headers(name),
                     timeout=timeout,
+                    session=self._signers[name].session(),
                 ),
                 schedule_delay_millis=flush,
             )
@@ -421,6 +427,8 @@ class OtlpDriver:
 
     async def __aenter__(self) -> Self:
         config = self._common_settings
+        ### credentials resolve before the exporters exist: a Google target reads its ADC off the loop, once.
+        self._signers = {name: await AuthSigner(target.auth).ready() for name, target in config.targets.items()}
         resource = Resource.create({**config.attributes, "service.name": config.service})
         self._traces = self._enter_traces(resource)
         self._tracer = self._traces.get_tracer("etrack")

@@ -19,6 +19,9 @@ generated reference under **Reference** in the navigation.
 | `AnyioAdapter` | `from etrack.providers.adapters.bus.anyio import AnyioAdapter` | the bus: `subscribe(sink, select=None)`, `dropped`, `failed` → [Send events](../basics/events.md) |
 | `LiveAdapter` | `from etrack.providers.adapters.sink.live import LiveAdapter` | the live buffer: `watch(thread, after)`, `threads()`, `offset(thread)` |
 | `OtlpDriver` | `from etrack.providers.drivers.sink.otlp import OtlpDriver` | OpenTelemetry spans and logs: `flush()`, `processor()` → [OpenTelemetry](../integrations/opentelemetry.md) |
+| `HttpDriver` | `from etrack.providers.drivers.sink.http import HttpDriver` | any HTTP endpoint, batched and retried; the base of a custom driver: `flush()`, `sent`, `failed` → [Custom drivers](../advanced/drivers.md) |
+| `PrometheusAdapter` | `from etrack.providers.adapters.sink.prometheus import PrometheusAdapter` | run metrics: `app` to scrape, `registry` → [Prometheus and Grafana](../integrations/prometheus.md) |
+| `AuthSigner` | `from etrack.infra.auth import AuthSigner` | one `Auth` signed onto requests: `ready()`, `headers()`, `session()` → [Authentication](../advanced/auth.md) |
 
 ## Watch
 

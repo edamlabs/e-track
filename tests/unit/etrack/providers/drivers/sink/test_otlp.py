@@ -4,11 +4,13 @@ import json
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+import google.auth
 import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from opentelemetry.trace import StatusCode
 
+from etrack.infra.config.auth import BearerAuth, GoogleAuth
 from etrack.infra.config.base import Secret
 from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
 from etrack.infra.errors import SinkError
@@ -16,6 +18,7 @@ from etrack.models.event import EventKind, EventPhase, Failure, Part, Usage
 from etrack.ports.sink import SinkPort
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 from support.collector import fake_collector
+from support.credentials import FakeCredentials
 from unit.etrack.conftest import RUN, frame
 
 if TYPE_CHECKING:
@@ -222,3 +225,30 @@ async def test_otlp_delta_is_logged_not_spanned(
 )
 async def test_otlp_flat(value: Any, expected: Any) -> None:
     assert OtlpDriver._common_flat(value) == expected
+
+
+async def test_otlp_google_target_signed_on_the_wire(
+    httpserver: HTTPServer, run_tree: Callable[[OtlpDriver], Awaitable[None]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(google.auth, "default", lambda **kwargs: (FakeCredentials(kwargs["quota_project_id"]), "p"))
+    collector = fake_collector(httpserver)
+    target = OtlpTarget(endpoint=collector.endpoint, auth=GoogleAuth(quota_project="billing"))
+    async with OtlpDriver(OtlpSettings(targets={"cloudtrace": target}, flush=timedelta(milliseconds=10))) as driver:
+        await run_tree(driver)
+        assert await driver.flush()
+    assert {(headers["Authorization"], headers["X-Goog-User-Project"]) for headers in collector.headers} == {
+        ("Bearer token-1", "billing")
+    }
+
+
+async def test_otlp_bearer_target_merged(
+    httpserver: HTTPServer, run_tree: Callable[[OtlpDriver], Awaitable[None]]
+) -> None:
+    collector = fake_collector(httpserver)
+    target = OtlpTarget(
+        endpoint=collector.endpoint, headers={"x-tenant": Secret("a")}, auth=BearerAuth(token=Secret("t"))
+    )
+    async with OtlpDriver(OtlpSettings(targets={"tempo": target}, flush=timedelta(milliseconds=10))) as driver:
+        await run_tree(driver)
+        assert await driver.flush()
+    assert all((h["Authorization"], h["X-Tenant"]) == ("Bearer t", "a") for h in collector.headers)

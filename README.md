@@ -29,7 +29,9 @@ uv add "e-track[langgraph,otel]"    # or: pip install "e-track[langgraph,otel]"
 | Extra | For |
 |---|---|
 | `langgraph` | tracking LangGraph agents (deepagents included) |
-| `otel` | Langfuse, LangSmith, Phoenix, Tempo, any OpenTelemetry collector |
+| `otel` | Langfuse, LangSmith, Phoenix, Tempo, Cloud Trace, any OpenTelemetry collector |
+| `http` | any HTTP endpoint — the base of a custom driver (a memory service, a webhook) |
+| `prometheus` | run metrics for Prometheus and Grafana |
 | `viewer` | the live canvas (Litestar on granian, React Flow) |
 | `all` | everything |
 
