@@ -79,3 +79,10 @@ async def test_channel_ignores_host_level(collector: Collector) -> None:
     finally:
         structlog.reset_defaults()
     assert len(collector.events) == 1
+
+
+async def test_channel_without_bus_logs_alone() -> None:
+    with capture_logs() as lines:
+        EventChannel().emit(frame())
+    (line,) = lines
+    assert (line["event"], line["id"]) == (EVENT, "s0")

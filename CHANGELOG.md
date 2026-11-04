@@ -4,6 +4,11 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Log-only tracking: `EventChannel()` takes no bus — every event validated and forwarded to the `etrack` logger,
+  published nowhere; no sink, no worker to open. Hand it a bus to add the sinks; the lines keep coming.
+
 ## [0.2.1] — 2026-11-04
 
 ### Changed
