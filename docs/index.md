@@ -20,7 +20,7 @@ Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs fami
   <div><h3>Never in the way</h3><p>Emitting costs the run ~5 µs. A slow or broken backend drops and counts — it never slows the agent or another backend.</p></div>
 </div>
 
-![The live viewer: the agent's declared graph lit by its run, the calls each node made, and the span tree with every span's input and output](assets/viewer.png)
+![The live viewer: the agent's declared graph lit by its run, the calls each node made counted inside it, and the span tree with every span's input and output](assets/viewer.png)
 
 ```python
 tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter())

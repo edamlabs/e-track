@@ -56,22 +56,22 @@ function closed(span: Span, event: RunEvent): Span {
   };
 }
 
-// One run's frames folded into its spans, keyed by id; frames arrive in `seq` order per run.
+// One run's frames folded into its spans, keyed by id; frames arrive in `seq` order per run. The map is the caller's,
+// filled in place: one fold over a run is O(frames), never a copy per frame.
 export function fold(spans: Map<string, Span>, event: RunEvent): Map<string, Span> {
   const known = spans.get(event.id);
-  const next = new Map(spans);
   switch (event.phase) {
     case "start":
     case "instant":
-      next.set(event.id, opened(event));
+      spans.set(event.id, opened(event));
       break;
     case "delta":
-      if (known) next.set(event.id, delta(known, event));
+      if (known) spans.set(event.id, delta(known, event));
       break;
     default:
-      if (known) next.set(event.id, closed(known, event));
+      if (known) spans.set(event.id, closed(known, event));
   }
-  return next;
+  return spans;
 }
 
 // A span's ancestors, nearest first; a cycle in a broken stream ends the walk instead of looping.

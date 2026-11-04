@@ -61,7 +61,8 @@ hooks: ## run all prek hooks on every file (ruff, ty, tach, zizmor, gitleaks)
 test: ## run tests, benchmarks out by default [TESTARGS='-k expr']
 	@uv run pytest tests $(TESTARGS) -n auto -q
 
-integration: ui ## real services: tests/sandbox up and down (collector + Phoenix), the viewer end to end; needs docker
+integration: ui ## real services: tests/sandbox up and down (collector + Phoenix), the viewer end to end in chromium; needs docker
+	@uv run playwright install chromium
 	@uv run pytest tests -m integration -q -p no:randomly
 
 cov: ## run tests with coverage gate (fail under 100%), benchmarks out like the CI matrix

@@ -1,4 +1,4 @@
-# Graphs and labels
+# Graphs, labels and kinds
 
 The viewer draws the graph your system **declares** — read once at startup — and lights it with what each run
 **does**. This page is the declared side: where a graph comes from, how its nodes are named for people, and what the
@@ -36,6 +36,7 @@ topology = Topology(
 | `id` | the node's id in the graph |
 | `name` | what its spans carry: a `node` span named `plan` lights the node named `plan` |
 | `label` | what people read; empty → the name |
+| `kind` | what the node is — an `EventKind` (`agent`, `tool`, `llm`, `evaluation`, `interrupt`…); `node`, a plain step, by default |
 | `entry`, `exit` | where a run enters and leaves |
 
 | `TopologyEdge` | |
@@ -43,14 +44,14 @@ topology = Topology(
 | `source`, `target` | the node ids it joins |
 | `conditional`, `label` | a router chooses it, and the branch it is |
 
-A subagent launched through a tool is not declared anywhere: it appears as a call beside the node that launched it,
-and in the span tree.
+A subagent launched through a tool is not declared anywhere: it is counted inside the node that launched it, and
+shown whole in the span tree.
 
 ## Labels — names for people
 
 A node's `name` is what its spans carry: `PatchToolCallsMiddleware.before_agent`, `tools`. It ties the node to its
-spans and never changes. A **label** is what the canvas shows instead — the name stays visible beneath it, and in the
-node's card. Two ways to give one:
+spans and never changes. A **label** is what the canvas shows instead — one word reads best from afar; the name stays
+in the node's card and its tooltip. Two ways to give one:
 
 === "Where the node is declared"
 
@@ -78,6 +79,29 @@ node's card. Two ways to give one:
 
 The span tree shows the same labels for node spans.
 
+## Kinds — what a node is
+
+A node's **kind** is its nature in the spans' own vocabulary, and its colour on the canvas: the border and the tint
+wear its family, and the kind is written on the node.
+
+| Family | Kinds | Colour |
+|---|---|---|
+| model | `llm`, `embedding` | blue |
+| action | `tool`, `mcp`, `retrieval` | orange |
+| delegation | `agent`, `subagent` | aqua |
+| control | `evaluation`, `interrupt`, `state` | yellow |
+| step | `node`, everything else | grey |
+
+The same two doors as labels:
+
+```python
+graph.add_node("gate", gate, metadata={"label": "Gate", "kind": "evaluation"})
+
+viewer = Viewer(watch=live, topology=topology, kinds={"model": EventKind.LLM, "tools": EventKind.TOOL})
+```
+
+A kind outside `EventKind` is refused when the graph is read.
+
 ## `Viewer`
 
 | kwarg | type | |
@@ -85,11 +109,12 @@ The span tree shows the same labels for node spans.
 | `watch` | `WatchPort` — `LiveAdapter` | where the frames are read |
 | `topology` | `Topology` | the declared graph; the viewer lays it out once |
 | `labels` | `Mapping[str, str]` | node id → the label people read; over any declared label |
+| `kinds` | `Mapping[str, EventKind]` | node id → what the node is; over any declared kind |
 
 | Attribute | |
 |---|---|
 | `app` | the ASGI app |
-| `topology` | the graph as laid out: every node's `rank`, `lane` and `label`, the arcs that close a loop marked |
+| `topology` | the graph as laid out: every node's `rank`, `lane`, `label` and `kind`, the arcs that close a loop marked |
 
 `LanggraphTopologyAdapter().read(...)` takes a compiled LangGraph graph — deep agents included, subgraphs opened — or
 the JSON of LangChain's `graph.get_graph().to_json()`, for a graph you only have as a file or from another process.

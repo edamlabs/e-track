@@ -4,6 +4,29 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- Viewer canvas (TODO_canvas): the declared graph is built once and only lit — no node is ever added, dropped, moved
+  or refitted while a run goes on. The calls a node makes no longer appear as nodes beside it: the running call and the
+  calls made, counted by kind, show inside the node (the span tree and the node card keep every call). The running
+  node blazes in its family colour, the last node to run keeps a ring, unvisited nodes recede, the arcs the run walked
+  brighten and the last one runs. Borders and tints wear the family, loud from afar; a fourth family, control
+  (`evaluation`, `interrupt`, `state`, yellow), joins model, action and delegation, validated as a set on the canvas
+  surface (worst CVD ΔE 9.4, normal ΔE 16.8); a plain step is grey. Titles are the label alone; the technical name is
+  in the node card. Frames reach React once per animation frame and fold in O(frames).
+
+### Fixed
+
+- Viewer: nodes vanished mid-run. The canvas rebuilt every node object per frame without `onNodesChange`, so React
+  Flow dropped their measures and hid them until a resize that never came (13 of 14 hidden, measured); the nodes now
+  keep their identity for the session.
+
+### Added
+
+- Browser integration tests: chromium watches the canvas while a deep agent runs under it and samples every 40 ms —
+  the node set constant, none hidden, the viewport never refitted, the slow node seen lit, counts, family borders,
+  and the replay drawing what the live run drew. Red on the previous canvas, green five runs in a row.
+
 ## [0.3.0] — 2026-11-04
 
 ### Added

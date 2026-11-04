@@ -1,22 +1,23 @@
 import type { EventKind } from "./contract";
 
-// Three hue families, validated as a set on the canvas surface (every pair, colour-blind included); every other kind
-// stays neutral. The kind is always written beside its colour: identity never rests on colour alone.
-export type Family = "model" | "action" | "delegation" | "neutral";
+// Four hue families and a neutral, validated as a set on the canvas surface (#0b1522, every pair, colour-blind
+// included: worst CVD ΔE 9.4, worst normal-vision ΔE 16.8). The yellow sits above the lightness band on purpose — a
+// border read from afar — and the kind is always written beside its colour: identity never rests on colour alone.
+export type Family = "model" | "action" | "delegation" | "control" | "neutral";
 
 const FAMILIES: Record<EventKind, Family> = {
   llm: "model",
   embedding: "model",
   tool: "action",
   mcp: "action",
+  retrieval: "action",
   agent: "delegation",
   subagent: "delegation",
+  evaluation: "control",
+  interrupt: "control",
+  state: "control",
   run: "neutral",
   node: "neutral",
-  retrieval: "neutral",
-  interrupt: "neutral",
-  state: "neutral",
-  evaluation: "neutral",
   custom: "neutral",
 };
 
@@ -25,9 +26,11 @@ export function family(kind: string): Family {
 }
 
 export const LEGEND: { family: Family; label: string }[] = [
-  { family: "model", label: "model · llm, embedding" },
-  { family: "action", label: "action · tool, mcp" },
-  { family: "delegation", label: "delegation · agent, subagent" },
+  { family: "model", label: "model" },
+  { family: "action", label: "action" },
+  { family: "delegation", label: "delegation" },
+  { family: "control", label: "control" },
+  { family: "neutral", label: "step" },
 ];
 
 // Status is a shape, never a hue shared with the kinds: ◌ running, ✓ done, ✕ error.

@@ -1,25 +1,16 @@
-import { Background, Controls, ReactFlow, useNodesInitialized, useReactFlow } from "@xyflow/react";
+import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchThreads, fetchTopology, followThread } from "./api";
 import type { LiveSummary, RunEvent, Topology } from "./contract";
 import { LEGEND } from "./kinds";
-import { arcs, calls, stages } from "./layout";
+import { activity, layout, trail } from "./layout";
+import { LiveContext } from "./live";
 import { NODE_TYPES } from "./nodes";
 import { Panel, type Pick } from "./panel";
-import { fold, type Span } from "./spans";
+import { fold, hostNode, type Span } from "./spans";
 
 const POLL_MS = 2000;
-
-// The view refits whenever the canvas grows: calls appear while the run goes on, after the first fit.
-// Only once the nodes are measured: a fit before that frames boxes of unknown size and lands off-centre.
-function FitOnGrow({ count }: { count: number }) {
-  const { fitView } = useReactFlow();
-  const measured = useNodesInitialized();
-  useEffect(() => {
-    if (measured && count > 0) fitView({ duration: 200, padding: 0.12 });
-  }, [measured, count, fitView]);
-  return null;
-}
+const EMPTY = { nodes: [], edges: [] };
 
 function initialThread(): string {
   return new URLSearchParams(window.location.search).get("thread") ?? "";
@@ -58,7 +49,27 @@ export function App() {
     setFrames([]);
     setRun("");
     setPicked(null);
-    return followThread(thread, (event) => setFrames((seen) => [...seen, event]), setOnline);
+    // frames arrive in bursts: they are kept and handed to React once per animation frame, never one render each.
+    let pending: RunEvent[] = [];
+    let scheduled = 0;
+    const flush = () => {
+      const batch = pending;
+      pending = [];
+      scheduled = 0;
+      setFrames((seen) => seen.concat(batch));
+    };
+    const stop = followThread(
+      thread,
+      (event) => {
+        pending.push(event);
+        scheduled ||= window.requestAnimationFrame(flush);
+      },
+      setOnline,
+    );
+    return () => {
+      stop();
+      window.cancelAnimationFrame(scheduled);
+    };
   }, [thread]);
 
   const runs = useMemo(() => [...new Set(frames.map((event) => event.run_id))], [frames]);
@@ -69,23 +80,27 @@ export function App() {
     [frames, current],
   );
 
-  const graph = useMemo(() => {
-    if (!topology) return { nodes: [], edges: [] };
-    const declared = stages(topology, spans);
-    const live = calls(declared, spans);
-    return { nodes: [...declared, ...live.nodes], edges: [...arcs(topology, spans), ...live.edges] };
-  }, [topology, spans]);
-
-  // The pick is the canvas's selection too: the node or the call it names is drawn selected.
-  const nodes = useMemo(
+  // Built once per topology: the same node objects for the whole session, so nothing is ever re-measured or hidden.
+  const graph = useMemo(() => (topology ? layout(topology) : EMPTY), [topology]);
+  const lit = useMemo(() => (topology ? activity(topology, spans) : new Map()), [topology, spans]);
+  const walked = useMemo(() => (topology ? trail(topology, spans) : null), [topology, spans]);
+  const edges = useMemo(
     () =>
-      graph.nodes.map((node) => ({
-        ...node,
-        selected:
-          picked?.type === "node" ? node.id === picked.id : picked?.type === "span" && node.data.span === picked.id,
-      })),
-    [graph.nodes, picked],
+      graph.edges.map((edge) => {
+        const state = edge.id === walked?.last ? "hot" : walked?.walked.has(edge.id) ? "walked" : "";
+        return state ? { ...edge, className: `${edge.className ?? ""} ${state}`, animated: state === "hot" } : edge;
+      }),
+    [graph.edges, walked],
   );
+
+  // The pick lights its declared node: a node itself, or the node a picked span ran under.
+  const pickedNode = useMemo(() => {
+    if (picked?.type === "node") return picked.id;
+    const span = picked?.type === "span" ? spans.get(picked.id) : undefined;
+    const host = span && (span.kind === "node" ? span : hostNode(spans, span));
+    return topology?.nodes.find((node) => node.name === host?.name)?.id ?? "";
+  }, [picked, spans, topology]);
+  const live = useMemo(() => ({ activity: lit, picked: pickedNode }), [lit, pickedNode]);
 
   return (
     <div className="shell">
@@ -124,27 +139,26 @@ export function App() {
       </header>
       <main>
         <div className="canvas">
-          <ReactFlow
-            nodes={nodes}
-            edges={graph.edges}
-            nodeTypes={NODE_TYPES}
-            onNodeClick={(_, node) =>
-              setPicked(
-                typeof node.data.span === "string"
-                  ? { type: "span", id: node.data.span }
-                  : { type: "node", id: node.id },
-              )
-            }
-            onPaneClick={() => setPicked(null)}
-            nodeOrigin={[0.5, 0]}
-            fitView
-            proOptions={{ hideAttribution: true }}
-            colorMode="dark"
-          >
-            <Background gap={24} />
-            <Controls showInteractive={false} />
-            <FitOnGrow count={graph.nodes.length} />
-          </ReactFlow>
+          <LiveContext.Provider value={live}>
+            <ReactFlow
+              nodes={graph.nodes}
+              edges={edges}
+              nodeTypes={NODE_TYPES}
+              onNodeClick={(_, node) => setPicked({ type: "node", id: node.id })}
+              onPaneClick={() => setPicked(null)}
+              nodeOrigin={[0.5, 0]}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+              fitView
+              fitViewOptions={{ padding: 0.1 }}
+              proOptions={{ hideAttribution: true }}
+              colorMode="dark"
+            >
+              <Background gap={24} />
+              <Controls showInteractive={false} />
+            </ReactFlow>
+          </LiveContext.Provider>
         </div>
         {topology && <Panel topology={topology} spans={spans} picked={picked} pick={setPicked} />}
       </main>
