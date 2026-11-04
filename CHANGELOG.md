@@ -4,6 +4,14 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Node kinds: `TopologyNode.kind`, a node's nature in the spans' own vocabulary (`EventKind`: agent, tool, llm,
+  evaluation, interrupt…; `NODE` by default) — declared with the node (`add_node(..., metadata={"kind": "tool"})`) or
+  given by the host (`Viewer(kinds={node_id: kind})`), as labels are. A kind outside the vocabulary is refused at read.
+  The canvas stripes a node in its kind's family colour and writes the kind beside it; the node card names it as its
+  role.
+
 ## [0.2.1] — 2026-11-04
 
 ### Changed
