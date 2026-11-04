@@ -1,6 +1,5 @@
 """tests/unit/etrack/providers/drivers/sink/http: batches leave full or on time, signed, retried when worth it, never twice."""
 
-import asyncio
 import json
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -18,6 +17,7 @@ from etrack.providers.drivers.sink.http import HttpDriver
 from support.endpoint import fake_endpoint
 from support.port import free_port
 from support.recall import Recall, RecallDriver
+from support.wait import eventually
 from unit.etrack.conftest import frame
 
 if TYPE_CHECKING:
@@ -47,8 +47,7 @@ async def test_http_batch_leaves_on_time(settings: Configure, httpserver: HTTPSe
     config = settings(endpoint.url).model_copy(update={"flush": timedelta(milliseconds=20)})
     async with HttpDriver(config) as driver:
         await driver.send(frame())
-        await asyncio.sleep(0.2)
-        assert len(endpoint.bodies) == 1
+        await eventually(lambda: len(endpoint.bodies) == 1)
         assert await driver.health()
     assert not await driver.health()
 
@@ -104,8 +103,7 @@ async def test_http_timer_logs_a_refusal(settings: Configure, httpserver: HTTPSe
     with capture_logs() as lines:
         async with HttpDriver(config) as driver:
             await driver.send(frame())
-            await asyncio.sleep(0.2)
-    assert any(line["event"] == "http flush failed" for line in lines)
+            await eventually(lambda: any(line["event"] == "http flush failed" for line in lines))
 
 
 async def test_http_closed(settings: Configure) -> None:

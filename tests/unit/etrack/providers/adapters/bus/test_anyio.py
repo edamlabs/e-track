@@ -14,6 +14,7 @@ from etrack.infra.errors import BusError
 from etrack.models.event import EventPhase, LogView, RunEvent
 from etrack.ports.bus import BusPort
 from etrack.providers.adapters.bus.anyio import AnyioAdapter
+from support.wait import eventually
 from unit.etrack.conftest import BrokenSink, RecordingSink, SlowSink, frame
 
 if TYPE_CHECKING:
@@ -177,6 +178,6 @@ async def test_anyio_sinks_deliver_in_parallel(recording: RecordingSink) -> None
         bus.subscribe(recording)
         _ = [bus.publish(frame(seq)) for seq in range(20)]
         ### the fast sink has everything while the slow one is still at its first views: workers never wait on each other.
-        await anyio.sleep(0.02)
-        assert (len(recording.views), len(slow.views) < 20) == (20, True)
+        await eventually(lambda: len(recording.views) == 20)
+        assert len(slow.views) < 20
     assert len(slow.views) == 20
