@@ -376,3 +376,8 @@ pre.error {
 .hint {
   padding: 12px 16px;
 }
+.stage:not(.fam-neutral).done,
+.stage:not(.fam-neutral).running,
+.stage:not(.fam-neutral).error {
+  border-left-color: var(--fam);
+}
