@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
+import structlog
 from prometheus_client.parser import text_string_to_metric_families
 
 from etrack.infra.config.auth import BearerAuth
@@ -46,7 +47,7 @@ async def test_sinks_run_reaches_http_and_prometheus(
         bus.subscribe(metrics)
         async with bus:
             tracker = Tracker(EventChannel(bus), LanggraphSourceAdapter(mcp=frozenset({"onto_query"})))
-            with tracker.track("sinks", {}) as tracked:
+            with structlog.contextvars.bound_contextvars(tenant="acme"), tracker.track("sinks", {}) as tracked:
                 await deep_agent().ainvoke({"messages": [("user", "¿qué es una póliza?")]}, tracked.config)
         async with (
             GranianAdapter(metrics.app, GranianSettings(port=free_port())) as server,
@@ -59,6 +60,8 @@ async def test_sinks_run_reaches_http_and_prometheus(
     assert {event["kind"] for event in posted} >= {"run", "node", "llm", "subagent", "mcp"}
     assert all(len(body.splitlines()) <= 5 for body in endpoint.bodies)
     assert {headers["Authorization"] for headers in endpoint.headers} == {"Bearer t"}
+    ### a key bound around the run rides every frame to every sink, as structlog carries it to every line.
+    assert {event["attributes"].get("tenant") for event in posted} == {"acme"}
     samples = {
         (sample.name, tuple(sorted(sample.labels.items()))): sample.value
         for family in text_string_to_metric_families(scraped)

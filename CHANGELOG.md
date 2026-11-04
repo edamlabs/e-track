@@ -6,6 +6,11 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- Extras, as structlog takes them: any key the record's model does not declare — a keyword to the channel, a key bound
+  with `bind_contextvars` around a call or a whole run, a keyword to `run.fold.span(...)` — lands in the record's
+  `attributes` and reaches every sink (OTLP span attributes, the HTTP body, the forwarded line, flat). Explicit
+  `attributes` win; `EventChannel(strict=True)` refuses extras instead. Before, they were dropped silently.
+- A test that sinks deliver in parallel: a slow sink never delays a fast one (each has its own worker).
 - Authentication as configuration for every driver (TODO_drivers): `Auth` — `none`, `headers`, `bearer`, `basic`,
   `google` (Application Default Credentials resolved off the loop, the token refreshed off the loop when due, the
   quota project billed) — signed by one `AuthSigner`; OTLP targets take `auth`, beside their fixed headers.

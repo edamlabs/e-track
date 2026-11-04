@@ -154,11 +154,20 @@ class FoldProcessor:
 
     @contextmanager
     def span(
-        self, name: str, kind: EventKind = EventKind.CUSTOM, parent: str = "", payload: dict[str, Any] | None = None
+        self,
+        name: str,
+        kind: EventKind = EventKind.CUSTOM,
+        parent: str = "",
+        payload: dict[str, Any] | None = None,
+        **attributes: Any,
     ) -> Generator[str]:
-        """A span around a block of the project's own code: START on entry, END or ERROR on exit; yields its id."""
+        """A span around a block of the project's own code: START on entry, END or ERROR on exit; yields its id. Any
+        other keyword is an attribute of the span — `run.fold.span("rank", tenant="acme", k=5)`."""
         span = uuid.uuid7().hex
-        self.open(Edge(id=span, parent=parent or self._root, kind=kind, name=name, payload=payload or {}))
+        edge = Edge(
+            id=span, parent=parent or self._root, kind=kind, name=name, payload=payload or {}, attributes=attributes
+        )
+        self.open(edge)
         try:
             yield span
         except BaseException as failure:

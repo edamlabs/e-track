@@ -168,3 +168,15 @@ async def test_anyio_subscribe_from_foreign_thread(recording: RecordingSink) -> 
         await anyio.sleep(0.01)
         bus.publish(frame())
     assert len(recording.views) == 1
+
+
+async def test_anyio_sinks_deliver_in_parallel(recording: RecordingSink) -> None:
+    slow = SlowSink()
+    async with AnyioAdapter() as bus:
+        bus.subscribe(slow)
+        bus.subscribe(recording)
+        _ = [bus.publish(frame(seq)) for seq in range(20)]
+        ### the fast sink has everything while the slow one is still at its first views: workers never wait on each other.
+        await anyio.sleep(0.02)
+        assert (len(recording.views), len(slow.views) < 20) == (20, True)
+    assert len(slow.views) == 20
