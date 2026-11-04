@@ -4,12 +4,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
-### Added
+## [0.3.0] — 2026-11-04
 
+### Added
 
 - Log-only tracking: `EventChannel()` takes no bus — every event validated and forwarded to the `etrack` logger,
   published nowhere; no sink, no worker to open. Hand it a bus to add the sinks; the lines keep coming.
-
 - Node kinds: `TopologyNode.kind`, a node's nature in the spans' own vocabulary (`EventKind`: agent, tool, llm,
   evaluation, interrupt…; `NODE` by default) — declared with the node (`add_node(..., metadata={"kind": "tool"})`) or
   given by the host (`Viewer(kinds={node_id: kind})`), as labels are. A kind outside the vocabulary is refused at read.
