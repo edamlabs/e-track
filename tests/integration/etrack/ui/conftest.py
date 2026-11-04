@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     from playwright.async_api import Browser, Page
 
-type Run = Callable[[], Awaitable[None]]
+type Run = Callable[..., Awaitable[None]]
 type Open = Callable[..., Awaitable[Canvas]]
 
 THREAD = "canvas"
@@ -101,14 +101,14 @@ async def served(
             app, prefix = HOSTS[host](viewer.app)
             async with GranianAdapter(app, GranianSettings(port=free_port())) as server:
 
-                async def run() -> None:
-                    with tracker.track(THREAD, {}) as tracked:
+                async def run(thread: str = THREAD) -> None:
+                    with tracker.track(thread, {}) as tracked:
                         await canvas_agent().ainvoke({"messages": [("user", "¿qué es una póliza?")]}, tracked.config)
 
-                async def open_canvas(width: int = 1280, height: int = 900) -> Canvas:
+                async def open_canvas(width: int = 1280, height: int = 900, thread: str = THREAD) -> Canvas:
                     page = await browser.new_page(viewport={"width": width, "height": height})
                     pages.append(page)
-                    await page.goto(f"{server.url}{prefix}/?thread={THREAD}")
+                    await page.goto(f"{server.url}{prefix}/?thread={thread}")
                     return Canvas(page)
 
                 yield run, open_canvas, frozenset(node.id for node in topology.nodes)

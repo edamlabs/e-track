@@ -1,5 +1,6 @@
 """tests/integration/etrack/ui/canvas: the declared graph stays whole and still while a run lights it, live and replayed."""
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -73,5 +74,29 @@ async def test_canvas_mounted_in_a_web_app(served: tuple[Run, Open, frozenset[st
     await run()
     canvas = await open_canvas()
     await canvas.drawn(len(declared))
+    await canvas.settled("llm 2")
+    assert await canvas.text("tools", "counts") == "subagent 1"
+
+
+async def test_canvas_concurrent_threads_stay_apart(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    left, right = await open_canvas(thread="left"), await open_canvas(thread="right")
+    await asyncio.gather(left.drawn(len(declared)), right.drawn(len(declared)))
+    await asyncio.gather(run("left"), run("right"))
+    await asyncio.gather(left.settled("llm 2"), right.settled("llm 2"))
+    ### each page reads its own thread only: one run each, the counts of one run, never the sum of both.
+    assert (len(await left.runs()), len(await right.runs())) == (1, 1)
+    assert (await left.text("tools", "counts"), await right.text("tools", "counts")) == ("subagent 1", "subagent 1")
+
+
+async def test_canvas_concurrent_runs_in_one_thread(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await asyncio.gather(run(), run())
+    await canvas.settled("llm 2")
+    ### two runs at once on one conversation: the picker offers both, and each one reads as one run.
+    assert len(await canvas.runs()) == 2
+    await canvas.pick(0)
     await canvas.settled("llm 2")
     assert await canvas.text("tools", "counts") == "subagent 1"

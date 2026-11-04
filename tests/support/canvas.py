@@ -100,6 +100,14 @@ class Canvas:
         )
         return found[0], found[1], found[2]
 
+    async def runs(self) -> list[str]:
+        """The runs the run picker offers, oldest first."""
+        return await self._page.locator("header label:has-text('run') option").all_inner_texts()
+
+    async def pick(self, index: int) -> None:
+        """Choose the run at `index` in the run picker."""
+        await self._page.locator("header label:has-text('run') select").select_option(index=index)
+
     async def arcs(self, state: str) -> int:
         """How many arcs are drawn in a state (`walked`, `hot`)."""
         return await self._page.locator(f".react-flow__edge.{state}").count()

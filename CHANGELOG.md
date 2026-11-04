@@ -29,7 +29,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 - Browser integration tests: chromium watches the canvas while a deep agent runs under it and samples every 40 ms —
   the node set constant, none hidden, the viewport never refitted, the slow node seen lit, counts, family borders,
   and the replay drawing what the live run drew; the layout on a wide and a narrow window; the viewer mounted under a
-  prefix in a FastAPI and in a Litestar app. Red on the previous canvas, green run after run.
+  prefix in a FastAPI and in a Litestar app; two threads run at once, each page reading its own; two runs at once on
+  one thread, both offered by the run picker, each read as one run. Red on the previous canvas, green run after run.
 
 ## [0.3.0] — 2026-11-04
 
