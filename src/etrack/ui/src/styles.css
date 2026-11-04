@@ -244,9 +244,16 @@ pre.error {
 .fam-neutral {
   --fam: var(--dim);
 }
-.call {
+.call,
+.stage:not(.fam-neutral) {
   border-left: 4px solid var(--fam);
 }
+.stage .kind {
+  align-self: center;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.stage .kind,
 .call .kind,
 .row .kind,
 .detail h3 .kind {

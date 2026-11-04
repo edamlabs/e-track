@@ -84,7 +84,11 @@ function SpanDetail({ span }: { span: Span }) {
 function NodeDetail({ id, topology, spans, pick }: { id: string } & Shared) {
   const node = topology.nodes.find((found) => found.id === id);
   if (!node) return null;
-  const role = node.entry ? "entry — where a run enters the graph" : node.exit ? "exit — where a run leaves" : "node";
+  const role = node.entry
+    ? "entry — where a run enters the graph"
+    : node.exit
+      ? "exit — where a run leaves"
+      : (node.kind ?? "node");
   const into = topology.edges.filter((edge) => edge.target === id);
   const out = topology.edges.filter((edge) => edge.source === id);
   const visits = [...spans.values()]
@@ -97,7 +101,10 @@ function NodeDetail({ id, topology, spans, pick }: { id: string } & Shared) {
     `${titleOf(topology, other)}${label ? ` · "${label}"` : ""}${conditional ? " · router" : ""}${loop ? " · loop" : ""}`;
   return (
     <div className="detail">
-      <h3>{node.label || node.name}</h3>
+      <h3>
+        {node.kind && node.kind !== "node" && <span className={`kind fam-${family(node.kind)}`}>{node.kind}</span>}{" "}
+        {node.label || node.name}
+      </h3>
       <dl>
         <dt>role</dt>
         <dd>{role}</dd>

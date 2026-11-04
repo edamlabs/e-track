@@ -3,6 +3,7 @@
 from litestar.testing import AsyncTestClient
 
 from etrack.logic.viewer import Viewer
+from etrack.models.event import EventKind
 from etrack.ports.topology import Topology, TopologyEdge, TopologyNode
 from etrack.providers.adapters.sink.live import LiveAdapter
 
@@ -33,3 +34,12 @@ async def test_viewer_labels_override_by_id() -> None:
         ("a", "Declared"),
         ("PatchToolCallsMiddleware.before_agent", "Patch tool calls"),
     ]
+
+
+async def test_viewer_kinds_override_by_id() -> None:
+    topology = Topology(
+        nodes=(TopologyNode(id="a", name="a", kind=EventKind.AGENT), TopologyNode(id="b", name="b")),
+        edges=(TopologyEdge(id="a>b", source="a", target="b"),),
+    )
+    viewer = Viewer(watch=LiveAdapter(), topology=topology, kinds={"b": EventKind.TOOL})
+    assert [node.kind for node in viewer.topology.nodes] == [EventKind.AGENT, EventKind.TOOL]
