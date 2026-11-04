@@ -36,7 +36,8 @@ import importlib.metadata
 
 from etrack.logic.api import Tracker
 
-print(importlib.metadata.version("e-track"))   # e.g. 0.1.3
+# e.g. 0.1.3
+print(importlib.metadata.version("e-track"))
 ```
 
 The package ships `py.typed`: mypy, pyright and ty check your calls against it.
@@ -47,8 +48,9 @@ The package ships `py.typed`: mypy, pyright and ty check your calls against it.
 git clone https://github.com/edamlabs/e-track && cd e-track
 make install        # uv sync, the canvas's pnpm deps, the prek hooks
 make check          # lint · types · architecture · tests
-make integration    # the tests against real services (needs docker): a collector and Phoenix come up and go down
+make integration    # real services (docker): a collector and Phoenix, up then down
 make ui             # rebuild the viewer's canvas
+make docs-serve     # these docs, live at 127.0.0.1:8000
 ```
 
-Next: [Quickstart →](quickstart.md)
+Next: [Run it in 3 steps →](quickstart.md)

@@ -67,10 +67,10 @@ async with GranianAdapter(viewer.app) as server:     # http://127.0.0.1:28130 �
 
 | Read | For |
 |---|---|
-| [Quickstart](https://edamlabs.github.io/e-track/quickstart/) | three steps on a small graph, every output shown |
-| [The record](https://edamlabs.github.io/e-track/guide/record/) | what an event holds: kinds, phases, the fields |
-| [Backends](https://edamlabs.github.io/e-track/guide/backends/) | Langfuse, Phoenix, LangSmith, Tempo — settings and what is verified |
-| [Viewer](https://edamlabs.github.io/e-track/guide/viewer/) | serve or mount the canvas, its API |
+| [Quickstart](https://edamlabs.github.io/e-track/start/quickstart/) | three steps on a small graph, every output shown |
+| [The record](https://edamlabs.github.io/e-track/advanced/record/) | what an event holds: kinds, phases, the fields |
+| [Backends](https://edamlabs.github.io/e-track/integrations/opentelemetry/) | Langfuse, Phoenix, LangSmith, Tempo — settings and what is verified |
+| [Viewer](https://edamlabs.github.io/e-track/basics/viewer/) | serve or mount the canvas, its API |
 
 The full guide lives at [edamlabs.github.io/e-track](https://edamlabs.github.io/e-track/).
 

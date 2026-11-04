@@ -6,7 +6,8 @@ settings object to a provider's constructor to override them in code — tests d
 ```python
 from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
 
-otlp = OtlpDriver(OtlpSettings(targets={"phoenix": OtlpTarget(endpoint="http://localhost:6006")}))
+target = OtlpTarget(endpoint="http://localhost:6006")
+otlp = OtlpDriver(OtlpSettings(targets={"phoenix": target}))
 ```
 
 ## All of them

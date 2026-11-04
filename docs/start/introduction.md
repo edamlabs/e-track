@@ -21,9 +21,9 @@ touching the agent.
 ## How it works
 
 ```
-your agent ──► source ──► fold ──► channel ──► bus ──┬──► otlp   → Langfuse · LangSmith · Phoenix · Tempo
- (LangGraph)   reads the   orders,   validates,      ├──► live   → the viewer, a chat, a reconnect
-               callbacks   parents   publishes       └──► yours  → anything that takes events
+agent ─► source ─► fold ─► channel ─► bus ─┬─► otlp  → Langfuse · Phoenix · LangSmith
+         reads      orders    validates,      ├─► live  → the viewer, a chat
+         callbacks  parents   publishes       └─► yours → anything that takes events
 ```
 
 | Piece | Does | You touch it |
@@ -35,7 +35,7 @@ your agent ──► source ──► fold ──► channel ──► bus ─�
 | **Bus** | one bounded queue and one worker per sink: publish never waits | once: `bus.subscribe(sink)` |
 | **Sinks** | where the events go: OTLP, the live buffer, your own | once each |
 
-The record is the contract: [The record](guide/record.md). The rest is wiring you do once, at startup.
+The record is the contract: [The record](../advanced/record.md). The rest is wiring you do once, at startup.
 
 ## Built on open-source engines
 

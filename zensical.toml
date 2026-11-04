@@ -10,19 +10,34 @@ copyright = "Copyright &copy; 2026 EDamLabs"
 extra_css = ["stylesheets/extra.css"]
 nav = [
   { "Home" = "index.md" },
-  { "Getting started" = [
-    { "Introduction" = "introduction.md" },
-    { "Installation" = "installation.md" },
-    { "Quickstart" = "quickstart.md" },
+  { "Get started" = [
+    { "What it is" = "start/introduction.md" },
+    { "Install" = "start/installation.md" },
+    { "Run it in 3 steps" = "start/quickstart.md" },
   ] },
-  { "Guide" = [
-    { "The record" = "guide/record.md" },
-    { "Tracking runs" = "guide/tracking.md" },
-    { "Sinks" = "guide/sinks.md" },
-    { "Backends" = "guide/backends.md" },
-    { "Viewer" = "guide/viewer.md" },
-    { "Logging" = "guide/logging.md" },
-    { "Settings" = "guide/settings.md" },
+  { "Basic use" = [
+    { "Track a run" = "basics/tracking.md" },
+    { "Send events" = "basics/events.md" },
+    { "Watch it live" = "basics/viewer.md" },
+  ] },
+  { "Advanced" = [
+    { "The record" = "advanced/record.md" },
+    { "Own spans, facts and masks" = "advanced/spans.md" },
+    { "Custom sinks and policies" = "advanced/sinks.md" },
+    { "Graphs and labels" = "advanced/graphs.md" },
+    { "Logging" = "advanced/logging.md" },
+    { "Settings and errors" = "advanced/settings.md" },
+  ] },
+  { "Integrations" = [
+    { "LangGraph and deepagents" = "integrations/langgraph.md" },
+    { "Langfuse" = "integrations/langfuse.md" },
+    { "Phoenix" = "integrations/phoenix.md" },
+    { "LangSmith" = "integrations/langsmith.md" },
+    { "OpenTelemetry" = "integrations/opentelemetry.md" },
+    { "Web apps" = "integrations/web.md" },
+  ] },
+  { "API" = [
+    { "At a glance" = "reference/api.md" },
   ] },
   { "Project" = [
     { "Decisions" = "decisions.md" },

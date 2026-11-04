@@ -1,21 +1,9 @@
-# Sinks
+# Custom sinks and policies
 
-A sink is anything that takes events: the OTLP driver, the live buffer, your own code. The bus between the channel
-and the sinks gives each one its own bounded queue and its own worker, so the run never waits for a sink and no sink
-waits for another.
+A sink is any class with three declarations and one method. The bus narrows each event to what the sink reads, skips
+the phases it does not want before queueing, and delivers on the sink's own worker.
 
-```python
-from etrack.providers.adapters.bus.anyio import AnyioAdapter
-
-bus = AnyioAdapter()
-bus.subscribe(live)
-bus.subscribe(otlp, select=lambda event: None if event.part == "reasoning" else event)   # a policy per sink
-async with bus:                     # open it last: it is closed first, and delivers what is queued before closing
-    ...
-print(bus.dropped, bus.failed)      # {} {} — what each sink lost (queue full) and refused (raised)
-```
-
-## `AnyioAdapter`
+## The bus: policies and losses
 
 | | |
 |---|---|
@@ -27,7 +15,7 @@ Setting: `ETRACK_BUS_CAPACITY` (1000) — events queued per sink. Past it, a slo
 counted, never the run's problem. A synchronous burst longer than the capacity, with no `await` in between, drops the
 rest: give the loop a turn in long synchronous loops.
 
-## What a sink declares
+## Write a sink
 
 Three class attributes and one method, plus the lifecycle every provider has:
 
@@ -41,9 +29,13 @@ from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 class CostSink:
     """Every LLM call's tokens, summed per run."""
 
-    spec: ClassVar[ProviderSpec] = ProviderSpec("cost", Locality.EMBEDDED, Workload.IO_BOUND, Isolation.LOOP)
-    view: ClassVar[type[EventView]] = Cost                          # the fields it reads (→ The record · Views)
-    phases: ClassVar[frozenset[EventPhase]] = frozenset({EventPhase.END})   # the phases it wants: no deltas, ever
+    spec: ClassVar[ProviderSpec] = ProviderSpec(
+        "cost", Locality.EMBEDDED, Workload.IO_BOUND, Isolation.LOOP
+    )
+    # the fields it reads (→ The record · Views)
+    view: ClassVar[type[EventView]] = Cost
+    # the phases it wants: no deltas, ever
+    phases: ClassVar[frozenset[EventPhase]] = frozenset({EventPhase.END})
 
     def __init__(self) -> None:
         self.tokens: dict[str, int] = {}
@@ -54,7 +46,8 @@ class CostSink:
 
     async def send(self, view: Cost) -> None:
         if view.kind == "llm" and view.usage:
-            self.tokens[view.run_id] = self.tokens.get(view.run_id, 0) + view.usage.total_tokens
+            spent = view.usage.total_tokens
+            self.tokens[view.run_id] = self.tokens.get(view.run_id, 0) + spent
 ```
 
 | Declares | Effect |
@@ -75,9 +68,11 @@ from etrack.providers.adapters.sink.live import LiveAdapter
 async with LiveAdapter() as live:
     bus.subscribe(live)
     ...
-    async for frame in live.watch("t1", after=41):     # frames 42… kept, then every new one, live
+    # frames 42… kept, then every new one, live
+    async for frame in live.watch("t1", after=41):
         print(frame.offset, frame.event.kind, frame.event.name)
-    live.threads()                                       # the kept conversations, newest first
+    # the kept conversations, newest first
+    live.threads()
 ```
 
 | | |
@@ -94,6 +89,3 @@ async with LiveAdapter() as live:
 | `ETRACK_LIVE_THREADS` | `256` | threads kept; the least recently written is evicted first |
 | `ETRACK_LIVE_BACKLOG` | `1000` | frames a watcher may lag before it is cut off, rather than slow the bus |
 
-## `OtlpDriver`
-
-The sink that speaks OpenTelemetry — its own page: [Backends](backends.md).

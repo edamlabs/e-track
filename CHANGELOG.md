@@ -4,6 +4,18 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-11-04
+
+### Changed
+
+- Documentation reorganised by what a reader needs (TODO_docs): Get started (what it is, install, run it in three
+  steps) · Basic use (track a run, send events, watch it live) · Advanced (the record, own spans and masks, custom
+  sinks, graphs and labels, logging, settings) · Integrations (LangGraph and deepagents, Langfuse, Phoenix, LangSmith,
+  OpenTelemetry, web apps) · API at a glance (every public piece with its import). Code samples fit the page; every
+  internal link checked.
+- Tests follow the house law: a test module holds tests and file-local parametrize tables only — helpers, doubles and
+  shared data moved to the conftest of their level and to `tests/support/`. What is tested is unchanged.
+
 ## [0.2.0] — 2026-11-03
 
 ### Added

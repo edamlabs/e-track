@@ -227,3 +227,4 @@ __marimo__/
 src/etrack/ui/node_modules/
 src/etrack/ui/dist/
 src/etrack/ui/tsconfig.tsbuildinfo
+.claude/worktrees/
