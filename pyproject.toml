@@ -40,12 +40,18 @@ dependencies = [
 ##### sources — LangGraph runs (deepagents included) through LangChain callbacks #####
 langgraph = ["langchain-core>=1.5.2", "langgraph>=1.2.7"]
 ##### sinks — OTLP spans and logs (Langfuse, LangSmith, Tempo, Phoenix, any collector) #####
-otel = ["opentelemetry-sdk>=1.44", "opentelemetry-exporter-otlp-proto-http>=1.44", "e-serde>=0.6.2"]
+otel = ["opentelemetry-sdk>=1.44", "opentelemetry-exporter-otlp-proto-http>=1.44", "e-serde>=0.6.2", "e-track[auth]"]
+##### sinks — any HTTP endpoint: the base a custom driver is built on (memory services, webhooks, own collectors) #####
+http = ["httpx>=0.28", "e-track[auth]"]
+##### sinks — Prometheus metrics, scraped from a mounted app; Grafana reads them #####
+prometheus = ["prometheus-client>=0.21"]
+##### auth — Google Application Default Credentials for any driver (Cloud Trace through the Telemetry API) #####
+auth = ["google-auth>=2.40", "requests>=2.32"]
 ##### topology layout — Rust-backed graph algorithms #####
 topology = ["rustworkx>=0.17"]
 ##### viewer — the live canvas: Litestar on granian's embedded server, the layout included #####
 viewer = ["litestar>=2.25", "granian>=2.8.5", "e-serde>=0.6.4", "e-track[topology]"]
-all = ["e-track[langgraph,otel,topology,viewer]"]
+all = ["e-track[langgraph,otel,http,prometheus,topology,viewer]"]
 
 [project.urls]
 Homepage = "https://github.com/edamlabs/e-track"
@@ -158,6 +164,9 @@ ignore = ["E501", "ISC001", "PLR0913"]
 ### Litestar resolves its handlers' signatures at runtime (parameters, OpenAPI): their annotation imports stay real.
 "src/etrack/api/**" = ["TID251", "TC001", "TC003"]
 "src/etrack/providers/adapters/server/granian.py" = ["TID251"]
+"src/etrack/infra/auth.py" = ["TID251"]
+"src/etrack/providers/drivers/sink/http.py" = ["TID251"]
+"src/etrack/providers/adapters/sink/prometheus.py" = ["TID251"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["etrack"]
@@ -183,6 +192,10 @@ ban-relative-imports = "all"
 "rustworkx".msg = "only processors/layout speaks rustworkx"
 "litestar".msg = "only etrack/api speaks Litestar"
 "granian".msg = "only providers/adapters/server/granian speaks granian"
+"google".msg = "only infra/auth speaks google-auth"
+"requests".msg = "only infra/auth speaks requests"
+"httpx".msg = "only providers/drivers/sink/http speaks httpx"
+"prometheus_client".msg = "only providers/adapters/sink/prometheus speaks prometheus-client"
 
 [tool.ruff.format]
 docstring-code-format = true

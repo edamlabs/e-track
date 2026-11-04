@@ -40,6 +40,10 @@ class ServerError(AdapterError):
     """A server that did not answer on its address, or stopped before it did."""
 
 
+class AuthError(DriverError):
+    """Credentials that cannot be found or refreshed: a driver cannot sign what it sends."""
+
+
 class SourceError(AdapterError):
     """A source that cannot bind a run: the host's config is not of the shape its framework takes."""
 

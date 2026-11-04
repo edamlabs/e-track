@@ -155,3 +155,12 @@ async def test_fold_span_error(fold: FoldProcessor, emitted: list[RunEvent]) -> 
     with pytest.raises(RuntimeError, match=msg), fold.span("work"):
         raise RuntimeError(msg)
     assert (emitted[-1].phase, emitted[-1].error) == (EventPhase.ERROR, Failure(type="RuntimeError", message=msg))
+
+
+async def test_fold_own_span_extras(fold: FoldProcessor, emitted: list[RunEvent]) -> None:
+    with fold.span("rank", tenant="acme", k=5):
+        pass
+    assert [(event.phase, event.attributes) for event in emitted] == [
+        (EventPhase.START, {"tenant": "acme", "k": 5}),
+        (EventPhase.END, {"tenant": "acme", "k": 5}),
+    ]

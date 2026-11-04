@@ -463,13 +463,26 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "e-serde" },
+    { name = "google-auth" },
     { name = "granian" },
+    { name = "httpx" },
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "litestar" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
+    { name = "prometheus-client" },
+    { name = "requests" },
     { name = "rustworkx" },
+]
+auth = [
+    { name = "google-auth" },
+    { name = "requests" },
+]
+http = [
+    { name = "google-auth" },
+    { name = "httpx" },
+    { name = "requests" },
 ]
 langgraph = [
     { name = "langchain-core" },
@@ -477,8 +490,13 @@ langgraph = [
 ]
 otel = [
     { name = "e-serde" },
+    { name = "google-auth" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
+    { name = "requests" },
+]
+prometheus = [
+    { name = "prometheus-client" },
 ]
 topology = [
     { name = "rustworkx" },
@@ -545,8 +563,14 @@ requires-dist = [
     { name = "e-serde", marker = "extra == 'all'", specifier = ">=0.6.4" },
     { name = "e-serde", marker = "extra == 'otel'", specifier = ">=0.6.2" },
     { name = "e-serde", marker = "extra == 'viewer'", specifier = ">=0.6.4" },
+    { name = "google-auth", marker = "extra == 'all'", specifier = ">=2.40" },
+    { name = "google-auth", marker = "extra == 'auth'", specifier = ">=2.40" },
+    { name = "google-auth", marker = "extra == 'http'", specifier = ">=2.40" },
+    { name = "google-auth", marker = "extra == 'otel'", specifier = ">=2.40" },
     { name = "granian", marker = "extra == 'all'", specifier = ">=2.8.5" },
     { name = "granian", marker = "extra == 'viewer'", specifier = ">=2.8.5" },
+    { name = "httpx", marker = "extra == 'all'", specifier = ">=0.28" },
+    { name = "httpx", marker = "extra == 'http'", specifier = ">=0.28" },
     { name = "langchain-core", marker = "extra == 'all'", specifier = ">=1.5.2" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=1.5.2" },
     { name = "langgraph", marker = "extra == 'all'", specifier = ">=1.2.7" },
@@ -558,13 +582,19 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.44" },
     { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.44" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.44" },
+    { name = "prometheus-client", marker = "extra == 'all'", specifier = ">=0.21" },
+    { name = "prometheus-client", marker = "extra == 'prometheus'", specifier = ">=0.21" },
     { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "requests", marker = "extra == 'all'", specifier = ">=2.32" },
+    { name = "requests", marker = "extra == 'auth'", specifier = ">=2.32" },
+    { name = "requests", marker = "extra == 'http'", specifier = ">=2.32" },
+    { name = "requests", marker = "extra == 'otel'", specifier = ">=2.32" },
     { name = "rustworkx", marker = "extra == 'all'", specifier = ">=0.17" },
     { name = "rustworkx", marker = "extra == 'topology'", specifier = ">=0.17" },
     { name = "rustworkx", marker = "extra == 'viewer'", specifier = ">=0.17" },
     { name = "structlog", specifier = ">=26.1" },
 ]
-provides-extras = ["all", "langgraph", "otel", "topology", "viewer"]
+provides-extras = ["all", "auth", "http", "langgraph", "otel", "prometheus", "topology", "viewer"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1919,6 +1949,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/64/84/4e54e226023063f426d84cc0da612eaae360283a82e3d76195c75ff81bba/prek-0.5.6-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:84215a6b8b3e8825eba924d91422df7c35e0413c134796a6821dcb917858ec8e", size = 6305234, upload-time = "2026-10-19T05:46:46.611Z" },
     { url = "https://files.pythonhosted.org/packages/c2/3c/064a1df7c0841d0cec8351eca492fc5b9a526314cb1ddb99276a21fdcf63/prek-0.5.6-py3-none-win_amd64.whl", hash = "sha256:e32821fb947700d322ca9d401009962bc9652e017fa232ceb27ce89168044e5b", size = 5709609, upload-time = "2026-10-19T05:46:48.476Z" },
     { url = "https://files.pythonhosted.org/packages/e4/67/3dad56a4a998d17cbb23c4577c101dc15298a0f3e572d3c87ca148449d80/prek-0.5.6-py3-none-win_arm64.whl", hash = "sha256:0ac40373841d087ec5efebd5b84c5c0eb5671285fdc7c2b4473096b30d0bf1e5", size = 5643378, upload-time = "2026-10-19T05:46:50.414Z" },
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.26.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/73/f1334c29c2af4cd9dba6c7817e61b611bd0215e2eb5565c6064a4de18802/prometheus_client-0.26.0.tar.gz", hash = "sha256:04a91bcf94e2cf74a44a1a874d651a2e853ed354b6e822f3b7487751465d5c2b", size = 92910, upload-time = "2026-07-24T19:36:41.893Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/a3/b69efbf4143b5b9859b977770bbbabcc2796b702fa69dc40271e45cd5a56/prometheus_client-0.26.0-py3-none-any.whl", hash = "sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6", size = 64494, upload-time = "2026-07-24T19:36:40.854Z" },
 ]
 
 [[package]]

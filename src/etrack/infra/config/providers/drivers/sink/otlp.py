@@ -5,16 +5,19 @@ from datetime import timedelta
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import SettingsConfigDict
 
+from etrack.infra.config.auth import Auth, NoAuth
 from etrack.infra.config.base import BaseSettings, Secret
 
 
 class OtlpTarget(BaseModel):
-    """One collector: its OTLP/HTTP base URL (signals under `/v1/traces`, `/v1/logs`) and the headers it authenticates."""
+    """One collector: its OTLP/HTTP base URL (signals under `/v1/traces`, `/v1/logs`), fixed headers, and how it
+    authenticates (`auth`: none, headers, bearer, basic, or google — Cloud Trace through the Telemetry API)."""
 
     model_config = ConfigDict(frozen=True)
 
     endpoint: str
     headers: dict[str, Secret] = Field(default_factory=dict)
+    auth: Auth = Field(default_factory=NoAuth)
 
 
 class OtlpSettings(BaseSettings):

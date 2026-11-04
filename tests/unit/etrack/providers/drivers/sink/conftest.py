@@ -1,16 +1,20 @@
 """tests/unit/etrack/providers/drivers/sink: in-memory OTLP exporters and a small run (a run span, an LLM under it) to send."""
 
-from typing import TYPE_CHECKING
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from etrack.infra.config.providers.drivers.sink.http import HttpSettings
 from etrack.models.event import EventKind, EventPhase, ModelRef, Usage
 from unit.etrack.conftest import RUN, frame
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    type Configure = Callable[..., HttpSettings]
 
     from etrack.providers.drivers.sink.otlp import OtlpDriver
 
@@ -69,3 +73,13 @@ def run_tree(root: str, child: str) -> Callable[[OtlpDriver], Awaitable[None]]:
         await driver.send(frame(3, EventPhase.END, id=root, kind=EventKind.RUN, name="deeptrack"))
 
     return send
+
+
+@pytest.fixture
+def settings() -> Configure:
+    """`settings(url, **fields)`: an HTTP sink's settings — no timer in the way, a backoff of a millisecond."""
+
+    def build(url: str, **fields: Any) -> HttpSettings:
+        return HttpSettings(endpoint=url, flush=timedelta(seconds=30), backoff=timedelta(milliseconds=1), **fields)
+
+    return build

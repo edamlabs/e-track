@@ -52,6 +52,7 @@ async def test_channel_model_subclass(collector: Collector, keys: dict[str, Any]
     channel.log.info(EVENT, **keys, tenant="acme")
     assert channel.model is AppEvent
     assert collector.events[0].tenant == "acme"  # ty: ignore[unresolved-attribute]
+    assert collector.events[0].attributes == {}
 
 
 @pytest.mark.parametrize("phase", list(EventPhase), ids=[str(phase) for phase in EventPhase])
@@ -86,3 +87,42 @@ async def test_channel_without_bus_logs_alone() -> None:
         EventChannel().emit(frame())
     (line,) = lines
     assert (line["event"], line["id"]) == (EVENT, "s0")
+
+
+async def test_channel_extras_become_attributes(collector: Collector, keys: dict[str, Any]) -> None:
+    EventChannel(collector).log.info(EVENT, **keys, user="damien", cost_center=7, attributes={"user": "own"})
+    assert collector.events[0].attributes == {"user": "own", "cost_center": 7}
+
+
+async def test_channel_bound_context_reaches_every_record(collector: Collector, keys: dict[str, Any]) -> None:
+    channel = EventChannel(collector)
+    with structlog.contextvars.bound_contextvars(tenant="acme", run_id=RUN):
+        channel.log.info(EVENT, **keys)
+        channel.emit(frame())
+        channel.emit(frame(attributes={"tenant": "own"}))
+    assert [event.attributes for event in collector.events] == [
+        {"tenant": "acme"},
+        {"tenant": "acme"},
+        {"tenant": "own"},
+    ]
+
+
+async def test_channel_forward_carries_extras_flat(collector: Collector, keys: dict[str, Any]) -> None:
+    with capture_logs() as lines:
+        EventChannel(collector).log.info(EVENT, **keys, user="damien")
+    assert lines[0]["user"] == "damien"
+
+
+async def test_channel_malformed_attributes_refused(collector: Collector, keys: dict[str, Any]) -> None:
+    with pytest.raises(ChannelError, match="not a RunEvent"):
+        EventChannel(collector).log.info(EVENT, **keys, attributes="flat")
+
+
+async def test_channel_strict_refuses_extras(collector: Collector, keys: dict[str, Any]) -> None:
+    channel = EventChannel(collector, strict=True)
+    channel.log.info(EVENT, **keys)
+    with pytest.raises(ChannelError, match=r"strict: no field \['user'\]"):
+        channel.log.info(EVENT, **keys, user="damien")
+    with structlog.contextvars.bound_contextvars(tenant="acme"):
+        channel.emit(frame())
+    assert [event.attributes for event in collector.events] == [{}, {}]

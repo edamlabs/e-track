@@ -54,6 +54,31 @@ Every frame, with its payload:
   agent version, tenant, experiment arm — under `app.` and every backend sees them. A node's state outputs are
   reported by their keys, not their values: what a span carried in full is the model's and the tools' payloads.
 
+## Extras — anything else, as structlog takes it
+
+The record has its fields; anything else you hand it travels too, in `attributes`, to every sink — OTLP as span
+attributes, the HTTP driver in its body, the forwarded log line flat:
+
+```python
+import structlog
+
+# around a whole run: every frame of it, the framework's included
+with structlog.contextvars.bound_contextvars(tenant="acme", plan="pro"), tracker.track("t1", config) as run:
+    ...
+    # on one span of your own
+    with run.fold.span("rerank", kind=EventKind.RETRIEVAL, k=5, index="policies"):
+        ...
+
+# on one frame you emit
+channel.log.info("run.event", run_id=run_id, seq=7, id=span, kind="custom", phase="instant", score=0.92)
+```
+
+A key the model declares is a field, never an extra; explicit `attributes` win over a bound key of the same name; a
+subclass of the record (→ [The record](record.md)) turns an extra into a typed field.
+
+**Strict mode.** `EventChannel(bus, strict=True)` takes no extras: a key the model does not declare is refused with
+`ChannelError`, and bound keys stay off the record — for a pipeline whose consumers expect the schema and nothing else.
+
 ## Emit without a framework
 
 Anything that is not a framework can emit straight into the channel — the same validation, the same sinks:
