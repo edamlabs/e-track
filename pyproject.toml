@@ -7,13 +7,13 @@ build-backend = "hatchling.build"
 [project]
 name = "e-track"
 dynamic = ["version"]
-description = "Run tracking for agent systems: one event model carried by a structlog channel, many parallel sinks (OTLP, live)."
+description = "Run tracking for agent systems: one event model on a structlog channel, parallel sinks (OpenTelemetry, Langfuse, Cloud Trace, Prometheus, HTTP) and a live graph viewer."
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICEN[CS]E*"]
 authors = [{ name = "EDamLabs" }]
-keywords = ["e-stack", "tracing", "langgraph", "opentelemetry", "structlog", "agents"]
+keywords = ["tracing", "observability", "opentelemetry", "structlog", "langgraph", "agents", "llm", "langfuse", "prometheus", "asyncio", "e-stack"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
