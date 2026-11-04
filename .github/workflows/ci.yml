@@ -73,6 +73,8 @@ jobs:
         run: |
           pnpm -C src/etrack/ui install --frozen-lockfile
           make ui
+      - name: Headless chromium — the canvas is tested in a real browser
+        run: uv run playwright install --with-deps chromium
       - name: Real services — collector + Phoenix; the viewer end to end
         run: uv run pytest tests -m integration -p no:randomly
 

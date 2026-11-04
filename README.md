@@ -17,7 +17,7 @@ slow backend never slows it.
 Part of the **EDamLabs eager series**: EDamLabs' own e- products ([EDamLabs families](https://github.com/edamlabs/e-workbench#identity)).
 
 <p align="center">
-  <img src="assets/viewer.png" alt="The live viewer: the agent's graph lit by its run, the calls of each node, the span tree with every span's input and output" width="900" />
+  <img src="assets/viewer.png" alt="The live viewer: the agent's graph lit by its run, the calls of each node counted inside it, the span tree with every span's input and output" width="900" />
 </p>
 
 ## Install

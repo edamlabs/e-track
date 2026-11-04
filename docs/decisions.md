@@ -110,3 +110,22 @@ with the orange and aqua at any count, so status left hue for shape.
 
 **Rejected.** An alias on `RunEvent` (the record would carry presentation); one hue per kind (thirteen hues no reader
 tells apart); status as border colour (it collided with the kinds).
+
+### 2026-11-04 · The canvas is the declared graph, lit; kinds take four families
+
+**Decision.** The canvas draws the declared graph once per topology and never adds, drops, moves or refits a node: a
+run only lights it — the running node blazes in its family, the last one keeps a ring, unvisited nodes recede, walked
+arcs brighten. The calls a node makes are counted inside it, no longer drawn beside it. A fourth colour family,
+control (`evaluation`, `interrupt`, `state`), yellow `#d4a000`, joins model, action and delegation; a plain step is grey.
+Supersedes the three-family half of 2026-11-03.
+
+**Evidence.** Measured in chromium on a deep agent's run: the old canvas hid 13 of 14 nodes mid-run (node objects
+rebuilt per frame, measures dropped by React Flow v12) and refitted the view as call nodes came and went. The browser
+tests now pin the node set, zero hidden nodes and one viewport across the whole run; red on the old canvas, green five
+runs in a row. Palette, dataviz checker on `#0b1522`, all pairs: violet failed protan (ΔE 1.9 with blue), magenta
+deutan (1.6 with aqua) and the normal floor (11.6 with orange), dark yellow `#c98500` the normal floor (10.6);
+`#d4a000` passes CVD (worst 9.4) and normal vision (16.8), above the lightness band — accepted: it is a border read
+from afar, and the kind is always written beside it.
+
+**Rejected.** Keeping call nodes and only fixing the measures (the graph still reshaped with every call); a refit
+per growth (the view jumped under the reader); a fourth hue from the violet or magenta steps (failed CVD).

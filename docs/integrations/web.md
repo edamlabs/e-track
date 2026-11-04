@@ -35,7 +35,7 @@ and raises `ServerError` if the socket does not answer within `ETRACK_SERVER_BOO
     app.mount("/etrack", viewer.app)
     ```
 
-The canvas uses relative paths: any prefix works. Link a conversation to its canvas: `/etrack/?thread=<thread_id>`.
+The canvas uses relative paths: any prefix works — both mounts are tested in a browser. Link a conversation to its canvas: `/etrack/?thread=<thread_id>`.
 
 ## In a lifespan
 

@@ -1,0 +1,102 @@
+"""tests/integration/etrack/ui/canvas: the declared graph stays whole and still while a run lights it, live and replayed."""
+
+import asyncio
+from typing import TYPE_CHECKING
+
+import pytest
+
+if TYPE_CHECKING:
+    from integration.etrack.ui.conftest import Open, Run
+
+pytestmark = pytest.mark.integration
+
+MODEL = "rgb(57, 135, 229)"
+ACTION = "rgb(217, 89, 38)"
+STEP = "rgb(123, 138, 150)"
+
+
+async def test_canvas_live_run_lights_a_still_graph(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await canvas.watch()
+    await run()
+    await canvas.settled("llm 2")
+    samples = await canvas.samples()
+    ### the whole record, not one frame: no node ever added, dropped or hidden, the view never refitted.
+    assert {frozenset(sample.ids) for sample in samples} == {declared}
+    assert max(sample.hidden for sample in samples) == 0
+    assert len({sample.viewport for sample in samples}) == 1
+    assert any("tools" in sample.running for sample in samples)
+    assert await canvas.text("tools", "now") == ""
+    assert await canvas.text("tools", "counts") == "subagent 1"
+    assert await canvas.arcs("hot") == 1
+    assert await canvas.arcs("walked") >= 3
+
+
+async def test_canvas_families_on_the_borders(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    await run()
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    assert (await canvas.border("model"), await canvas.border("tools")) == (MODEL, ACTION)
+    assert await canvas.border("PatchToolCallsMiddleware.before_agent") == STEP
+    assert (await canvas.text("model", "kind"), await canvas.text("model", "title")) == ("LLM", "Model")
+
+
+async def test_canvas_replay_draws_what_live_drew(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    await run()
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await canvas.settled("llm 2")
+    assert await canvas.text("model", "counts") == "llm 2"
+    assert await canvas.text("tools", "counts") == "subagent 1"
+    assert await canvas.arcs("hot") == 1
+
+
+@pytest.mark.parametrize(("width", "below"), [(1280, False), (760, True)], ids=["wide", "narrow"])
+async def test_canvas_fits_the_window(served: tuple[Run, Open, frozenset[str]], width: int, below: bool) -> None:
+    _, open_canvas, declared = served
+    canvas = await open_canvas(width, 900)
+    await canvas.drawn(len(declared))
+    await canvas.link("live")
+    pane, panel, nodes = await canvas.boxes()
+    ### the panel never crowds the graph out: beside it up to its cap, under it on a narrow window.
+    assert (panel["y"] >= pane["y"] + pane["height"] - 1) is below
+    assert panel["width"] <= (width if below else 420)
+    assert all(pane["x"] <= node["x"] and node["x"] + node["width"] <= pane["x"] + pane["width"] for node in nodes)
+
+
+@pytest.mark.parametrize("host", ["fastapi", "litestar"], indirect=True)
+async def test_canvas_mounted_in_a_web_app(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    await run()
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await canvas.settled("llm 2")
+    assert await canvas.text("tools", "counts") == "subagent 1"
+
+
+async def test_canvas_concurrent_threads_stay_apart(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    left, right = await open_canvas(thread="left"), await open_canvas(thread="right")
+    await asyncio.gather(left.drawn(len(declared)), right.drawn(len(declared)))
+    await asyncio.gather(run("left"), run("right"))
+    await asyncio.gather(left.settled("llm 2"), right.settled("llm 2"))
+    ### each page reads its own thread only: one run each, the counts of one run, never the sum of both.
+    assert (len(await left.runs()), len(await right.runs())) == (1, 1)
+    assert (await left.text("tools", "counts"), await right.text("tools", "counts")) == ("subagent 1", "subagent 1")
+
+
+async def test_canvas_concurrent_runs_in_one_thread(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await asyncio.gather(run(), run())
+    await canvas.settled("llm 2")
+    ### two runs at once on one conversation: the picker offers both, and each one reads as one run.
+    assert len(await canvas.runs()) == 2
+    await canvas.pick(0)
+    await canvas.settled("llm 2")
+    assert await canvas.text("tools", "counts") == "subagent 1"

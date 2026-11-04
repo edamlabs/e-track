@@ -1,37 +1,53 @@
 import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
-import { STATUS_GLYPH } from "./kinds";
-import type { CallData, StageData } from "./layout";
+import { family, STATUS_GLYPH } from "./kinds";
+import type { StageData } from "./layout";
+import { useActivity } from "./live";
 
-export function StageNode({ data, selected }: NodeProps<Node<StageData>>) {
-  const renamed = data.title !== data.name;
+// A declared node, lit by the run: its nature as a coloured border and a written kind, its title, the call it is
+// making now and the calls it made, counted by kind. Its size never changes, so the graph never moves.
+export function StageNode({ id, data }: NodeProps<Node<StageData>>) {
+  const { activity, picked } = useActivity(id);
+  const classes = [
+    "stage",
+    `fam-${data.family}`,
+    activity.status,
+    data.edge,
+    activity.last ? "last" : "",
+    picked ? "picked" : "",
+  ];
   return (
-    <div
-      className={`stage fam-${data.family} ${data.status} ${data.edge} ${selected ? "selected" : ""}`}
-      title={data.name}
-    >
+    <div className={classes.filter(Boolean).join(" ")} title={data.name}>
       <Handle type="target" position={Position.Top} />
-      <span className={`glyph ${data.status}`}>{STATUS_GLYPH[data.status]}</span>
-      {data.kind !== "node" && <span className="kind">{data.kind}</span>}
-      <span className="text">
-        <span className="label">{data.title}</span>
-        {renamed && <span className="name">{data.name}</span>}
-      </span>
-      {data.visits > 1 && <span className="visits">×{data.visits}</span>}
+      {data.edge ? (
+        <span className="title">{data.title}</span>
+      ) : (
+        <>
+          <span className="head">
+            <span className={`glyph ${activity.status}`}>{STATUS_GLYPH[activity.status]}</span>
+            <span className="kind">{data.kind}</span>
+            {activity.visits > 1 && <span className="visits">×{activity.visits}</span>}
+          </span>
+          <span className="title">{data.title}</span>
+          <span className="now">
+            {activity.current && (
+              <>
+                <span className={`kind fam-${family(activity.current.kind)}`}>{activity.current.kind}</span>{" "}
+                {activity.current.name}
+              </>
+            )}
+          </span>
+          <span className="counts">
+            {activity.counts.map(([kind, count]) => (
+              <span key={kind} className={`count fam-${family(kind)}`}>
+                {kind} {count}
+              </span>
+            ))}
+          </span>
+        </>
+      )}
       <Handle type="source" position={Position.Bottom} />
-      <Handle type="source" id="side" position={Position.Right} />
     </div>
   );
 }
 
-export function CallNode({ data, selected }: NodeProps<Node<CallData>>) {
-  return (
-    <div className={`call fam-${data.family} ${data.status} ${selected ? "selected" : ""}`} title={data.label}>
-      <Handle type="target" position={Position.Left} />
-      <span className={`glyph ${data.status}`}>{STATUS_GLYPH[data.status]}</span>
-      <span className="kind">{data.kind}</span>
-      <span className="label">{data.label}</span>
-    </div>
-  );
-}
-
-export const NODE_TYPES = { stage: StageNode, call: CallNode };
+export const NODE_TYPES = { stage: StageNode };
