@@ -4,6 +4,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-04
+
 ### Changed
 
 - Viewer canvas (TODO_canvas): the declared graph is built once and only lit — no node is ever added, dropped, moved
