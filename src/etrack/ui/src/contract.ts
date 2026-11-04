@@ -2,11 +2,28 @@
 
 /**
  * What a span is. `CUSTOM` is the fallback for whatever a source or a project names that no other kind covers.
+ */
+export type EventKind =
+  | "agent"
+  | "custom"
+  | "embedding"
+  | "evaluation"
+  | "interrupt"
+  | "llm"
+  | "mcp"
+  | "node"
+  | "retrieval"
+  | "run"
+  | "state"
+  | "subagent"
+  | "tool";
+/**
+ * What a span is. `CUSTOM` is the fallback for whatever a source or a project names that no other kind covers.
  *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "EventKind".
  */
-export type EventKind =
+export type EventKind1 =
   | "agent"
   | "custom"
   | "embedding"
@@ -49,8 +66,9 @@ export interface Topology {
   lanes?: number;
 }
 /**
- * One declared node: its id, the name a span carries when it runs, the label a person reads, its place once laid
- * out. `name` ties the node to its spans and never changes; `label` is display only — empty, the name is shown.
+ * One declared node: its id, the name a span carries when it runs, the label a person reads, what it is, its place
+ * once laid out. `name` ties the node to its spans and never changes; `label` is display only — empty, the name is
+ * shown; `kind` is its nature in the spans' vocabulary (an agent, a tool, a model call…) — a plain step is a `NODE`.
  *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "TopologyNode".
@@ -59,6 +77,7 @@ export interface TopologyNode {
   id: string;
   name: string;
   label?: string;
+  kind?: EventKind;
   entry?: boolean;
   exit?: boolean;
   rank?: number;
@@ -107,7 +126,7 @@ export interface RunEvent {
   seq: number;
   id: string;
   parent?: string;
-  kind: EventKind;
+  kind: EventKind1;
   phase: EventPhase;
   name?: string;
   node?: string;

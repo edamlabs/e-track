@@ -14,12 +14,15 @@ from langgraph.constants import END, START
 
 from etrack.infra.errors import SourceError
 from etrack.infra.logger import logger
+from etrack.models.event import EventKind
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 from etrack.ports.topology import Topology, TopologyEdge, TopologyNode
 
 XRAY: Final[bool] = True
 ### the metadata key a node's human label is declared under: `add_node("plan", fn, metadata={"label": "Plan"})`.
 LABEL: Final[str] = "label"
+### the metadata key a node's nature is declared under, an `EventKind` value: `metadata={"kind": "tool"}`.
+KIND: Final[str] = "kind"
 
 
 class GraphNode(msgspec.Struct, frozen=True, kw_only=True):
@@ -81,6 +84,18 @@ class LanggraphTopologyAdapter:
         return str((metadata or {}).get(LABEL) or "")
 
     @staticmethod
+    def _read_kind(metadata: dict[str, Any] | None) -> EventKind:
+        """The nature a node was declared with, or `NODE`; a value outside the vocabulary is refused."""
+        match (metadata or {}).get(KIND):
+            case None:
+                return EventKind.NODE
+            case str() as kind if kind in EventKind:
+                return EventKind(kind)
+            case other:
+                msg = f"langgraph: node kind {other!r} is none of {sorted(EventKind)}"
+                raise SourceError(msg)
+
+    @staticmethod
     def _read_arcs(arcs: Any) -> tuple[TopologyEdge, ...]:
         """The arcs of either reading — LangChain's `Edge` or the export's — under one id scheme."""
         return tuple(
@@ -106,6 +121,7 @@ class LanggraphTopologyAdapter:
                 id=node.id,
                 name=cls._read_name(node),
                 label=cls._read_label(node.metadata),
+                kind=cls._read_kind(node.metadata),
                 entry=node.id == START,
                 exit=node.id == END,
             )
@@ -120,6 +136,7 @@ class LanggraphTopologyAdapter:
                 id=key,
                 name=str(node.name),
                 label=self._read_label(node.metadata),
+                kind=self._read_kind(node.metadata),
                 entry=key == START,
                 exit=key == END,
             )

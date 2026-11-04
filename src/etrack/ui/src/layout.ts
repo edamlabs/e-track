@@ -13,6 +13,8 @@ const LIVE_KINDS = new Set(["llm", "tool", "mcp", "subagent", "retrieval", "inte
 export interface StageData extends Record<string, unknown> {
   name: string;
   title: string;
+  kind: string;
+  family: Family;
   status: Status | "idle";
   visits: number;
   edge: "entry" | "exit" | "";
@@ -50,6 +52,8 @@ export function stages(topology: Topology, spans: Map<string, Span>): Node<Stage
       data: {
         name: node.name,
         title: node.label || node.name,
+        kind: node.kind ?? "node",
+        family: family(node.kind ?? "node"),
         status: newest?.status ?? "idle",
         visits: mine.length,
         edge: node.entry ? "entry" : node.exit ? "exit" : "",

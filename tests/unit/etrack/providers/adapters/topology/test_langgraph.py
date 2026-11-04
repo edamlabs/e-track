@@ -7,6 +7,7 @@ from deepagents import create_deep_agent
 from langgraph.graph import END, START, MessagesState
 
 from etrack.infra.errors import SourceError
+from etrack.models.event import EventKind
 from etrack.ports.topology import TopologyPort
 from etrack.providers.adapters.topology.langgraph import LanggraphTopologyAdapter
 from support.graph import state_graph
@@ -76,3 +77,31 @@ async def test_langgraph_reads_declared_labels() -> None:
     for read in (compiled, compiled.get_graph(xray=True).to_json()):
         labels = {node.id: node.label for node in LanggraphTopologyAdapter().read(read).nodes}
         assert (labels["plan"], labels["act"]) == ("Plan the answer", "")
+
+
+async def test_langgraph_reads_declared_kinds() -> None:
+    def step(state: MessagesState) -> dict[str, Any]:
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("think", step, metadata={"kind": "agent"})
+    graph.add_node("act", step)
+    graph.add_edge(START, "think")
+    graph.add_edge("think", "act")
+    graph.add_edge("act", END)
+    compiled = graph.compile()
+    for read in (compiled, compiled.get_graph(xray=True).to_json()):
+        kinds = {node.id: node.kind for node in LanggraphTopologyAdapter().read(read).nodes}
+        assert (kinds["think"], kinds["act"], kinds[START]) == (EventKind.AGENT, EventKind.NODE, EventKind.NODE)
+
+
+async def test_langgraph_rejects_unknown_kind() -> None:
+    def step(state: MessagesState) -> dict[str, Any]:
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("odd", step, metadata={"kind": "robot"})
+    graph.add_edge(START, "odd")
+    graph.add_edge("odd", END)
+    with pytest.raises(SourceError, match="node kind 'robot'"):
+        LanggraphTopologyAdapter().read(graph.compile())

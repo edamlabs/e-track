@@ -2,7 +2,8 @@
 
 Hand it the sink that keeps the frames (`LiveAdapter`, or any `WatchPort`) and the graph a topology adapter read; it
 places the graph and builds the app. `labels` names nodes for people — by node id, over any label the graph declared —
-for graphs whose nodes you did not declare yourself (a library's middleware, a mounted subgraph). The host chooses where it lives: mounted in its own ASGI app (`viewer.app` under
+for graphs whose nodes you did not declare yourself (a library's middleware, a mounted subgraph); `kinds` gives their
+nature the same way, so the canvas colours them by family. The host chooses where it lives: mounted in its own ASGI app (`viewer.app` under
 any prefix) or served on a port of its own, in the same process (`GranianAdapter(viewer.app)`)."""
 
 from types import MappingProxyType
@@ -16,6 +17,7 @@ from etrack.processors.layout import LayoutProcessor
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from etrack.models.event import EventKind
     from etrack.ports.server import Asgi
     from etrack.ports.sink import WatchPort
     from etrack.ports.topology import Topology
@@ -26,16 +28,25 @@ class Viewer:
 
     __slots__ = ("_api", "_topology")
 
-    def __init__(self, watch: WatchPort, topology: Topology, labels: Mapping[str, str] = MappingProxyType({})) -> None:
-        self._topology = LayoutProcessor().place(self._init_labelled(topology, labels))
+    def __init__(
+        self,
+        watch: WatchPort,
+        topology: Topology,
+        labels: Mapping[str, str] = MappingProxyType({}),
+        kinds: Mapping[str, EventKind] = MappingProxyType({}),
+    ) -> None:
+        self._topology = LayoutProcessor().place(self._init_declared(topology, labels, kinds))
         self._api = ViewerApi(self._topology, watch)
 
     ##### PRIVATE #####
 
     @staticmethod
-    def _init_labelled(topology: Topology, labels: Mapping[str, str]) -> Topology:
-        """The topology with the host's labels over the declared ones, matched by node id."""
-        nodes = tuple(msgspec.structs.replace(node, label=labels.get(node.id, node.label)) for node in topology.nodes)
+    def _init_declared(topology: Topology, labels: Mapping[str, str], kinds: Mapping[str, EventKind]) -> Topology:
+        """The topology with the host's labels and kinds over the declared ones, matched by node id."""
+        nodes = tuple(
+            msgspec.structs.replace(node, label=labels.get(node.id, node.label), kind=kinds.get(node.id, node.kind))
+            for node in topology.nodes
+        )
         return msgspec.structs.replace(topology, nodes=nodes)
 
     ############################################################
