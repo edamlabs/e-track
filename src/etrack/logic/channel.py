@@ -4,7 +4,8 @@ The channel is a structlog logger of its own (`wrap_logger`), so it never touche
 host's level never drops an event. Its chain: the bound context (`run_id`, `thread_id`) merged in → the keys
 validated into the channel's model (`RunEvent` or a project's subclass) → the record published on the bus → a
 narrowed line (`LogView` by default) forwarded to the host's own `etrack` logger at the phase's level, where the
-host's rendering and filtering decide what is printed. Any code may emit: `channel.log.info("run.event", kind=…)`
+host's rendering and filtering decide what is printed. Without a bus the channel stands alone: validated, forwarded,
+published nowhere — run tracking as log lines, no sink and no worker; hand it a bus to add the sinks. Any code may emit: `channel.log.info("run.event", kind=…)`
 with the reserved keys, or `channel.emit(event)` with a record already built — the same chain either way."""
 
 import logging
@@ -47,7 +48,7 @@ class EventChannel:
 
     def __init__(
         self,
-        bus: BusPort,
+        bus: BusPort | None = None,
         model: type[RunEvent] = RunEvent,
         forward: type[EventView] | None = LogView,
     ) -> None:
@@ -78,7 +79,11 @@ class EventChannel:
         return {"event": event_dict.get("event", EVENT), "_record": record}
 
     def _emit_publish(self, _logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
-        self._bus.publish(event_dict["_record"])
+        match self._bus:
+            case None:
+                pass
+            case bus:
+                bus.publish(event_dict["_record"])
         return event_dict
 
     def _emit_forward(self, _logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
