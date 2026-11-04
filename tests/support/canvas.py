@@ -85,6 +85,21 @@ class Canvas:
         stage = self._page.locator(f'.react-flow__node[data-id="{node}"] .stage')
         return await stage.evaluate("(element) => getComputedStyle(element).borderTopColor")
 
+    async def link(self, state: str) -> None:
+        """Wait until the bar shows the event stream in `state` (`live`, `reconnecting`…)."""
+        await self._page.locator(f".link.{state}").wait_for()
+
+    async def boxes(self) -> tuple[dict[str, float], dict[str, float], list[dict[str, float]]]:
+        """Where the canvas pane, the panel and every drawn node sit on the screen."""
+        found: Any = await self._page.evaluate(
+            """() => {
+              const box = (element) => { const r = element.getBoundingClientRect(); return {x: r.x, y: r.y, width: r.width, height: r.height}; };
+              return [box(document.querySelector('.canvas')), box(document.querySelector('.panel')),
+                      [...document.querySelectorAll('.react-flow__node')].map(box)];
+            }"""
+        )
+        return found[0], found[1], found[2]
+
     async def arcs(self, state: str) -> int:
         """How many arcs are drawn in a state (`walked`, `hot`)."""
         return await self._page.locator(f".react-flow__edge.{state}").count()

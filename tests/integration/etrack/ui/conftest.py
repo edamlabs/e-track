@@ -23,6 +23,7 @@ from etrack.providers.adapters.sink.live import LiveAdapter
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
 from etrack.providers.adapters.topology.langgraph import LanggraphTopologyAdapter
 from support.canvas import Canvas
+from support.hosts import HOSTS
 from support.model import call, script
 from support.port import free_port
 
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Browser, Page
 
 type Run = Callable[[], Awaitable[None]]
-type Open = Callable[[], Awaitable[Canvas]]
+type Open = Callable[..., Awaitable[Canvas]]
 
 THREAD = "canvas"
 SLOW = 0.8
@@ -74,8 +75,16 @@ async def browser() -> AsyncIterator[Browser]:
 
 
 @pytest.fixture
-async def served(canvas_agent: Callable[[], Any], browser: Browser) -> AsyncIterator[tuple[Run, Open, frozenset[str]]]:
-    """The agent's run on `THREAD`, a way to open the canvas on it, and the declared node ids."""
+def host(request: pytest.FixtureRequest) -> str:
+    """The web app the viewer lives in: `bare` unless a test parametrizes it indirectly."""
+    return getattr(request, "param", "bare")
+
+
+@pytest.fixture
+async def served(
+    canvas_agent: Callable[[], Any], browser: Browser, host: str
+) -> AsyncIterator[tuple[Run, Open, frozenset[str]]]:
+    """The agent's run on `THREAD`, a way to open the canvas on it — `open(width, height)` — and the declared ids."""
     async with LiveAdapter() as live:
         bus = AnyioAdapter()
         bus.subscribe(live)
@@ -89,16 +98,17 @@ async def served(canvas_agent: Callable[[], Any], browser: Browser) -> AsyncIter
                 kinds={"model": EventKind.LLM, "tools": EventKind.TOOL},
             )
             pages: list[Page] = []
-            async with GranianAdapter(viewer.app, GranianSettings(port=free_port())) as server:
+            app, prefix = HOSTS[host](viewer.app)
+            async with GranianAdapter(app, GranianSettings(port=free_port())) as server:
 
                 async def run() -> None:
                     with tracker.track(THREAD, {}) as tracked:
                         await canvas_agent().ainvoke({"messages": [("user", "¿qué es una póliza?")]}, tracked.config)
 
-                async def open_canvas() -> Canvas:
-                    page = await browser.new_page(viewport={"width": 1280, "height": 900})
+                async def open_canvas(width: int = 1280, height: int = 900) -> Canvas:
+                    page = await browser.new_page(viewport={"width": width, "height": height})
                     pages.append(page)
-                    await page.goto(f"{server.url}/?thread={THREAD}")
+                    await page.goto(f"{server.url}{prefix}/?thread={THREAD}")
                     return Canvas(page)
 
                 yield run, open_canvas, frozenset(node.id for node in topology.nodes)

@@ -34,7 +34,8 @@ body {
 }
 header {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 10px 18px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
@@ -55,20 +56,23 @@ select {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 4px 8px;
+  max-width: 280px;
+  text-overflow: ellipsis;
 }
-.online {
+.link {
   margin-left: auto;
   font-size: 12px;
+  color: var(--dim);
 }
-.online.on {
+.link.live {
   color: var(--done);
 }
-.online.off {
+.link.reconnecting {
   color: var(--fail);
 }
 main {
   display: grid;
-  grid-template-columns: 1fr 420px;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 30vw, 420px);
   min-height: 0;
 }
 .canvas {
@@ -349,5 +353,17 @@ pre.error {
 @keyframes pulse {
   50% {
     opacity: 0.35;
+  }
+}
+
+/* narrow: the panel moves under the canvas, the bar wraps */
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(220px, 42%);
+  }
+  .panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
 }

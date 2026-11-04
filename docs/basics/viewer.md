@@ -33,6 +33,7 @@ Inside a web app instead: mount `viewer.app` → [Web apps](../integrations/web.
 | click a **node** | what it is: its role, the nodes it comes from and goes to, its visits in this run, the calls it made |
 | click a **span** in the tree | its status, latency, tokens, reasoning, text, input and output; its node is marked on the canvas |
 | click the empty canvas | clear the selection |
+| read the **stream** state (top right) | `live` — following the thread · `connecting` · `reconnecting` — the stream dropped and is being retried, nothing is lost · `idle` — no thread chosen |
 
 ## Read it
 

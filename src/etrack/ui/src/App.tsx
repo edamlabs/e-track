@@ -1,6 +1,6 @@
-import { Background, Controls, ReactFlow } from "@xyflow/react";
+import { Background, Controls, ReactFlow, useReactFlow } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
-import { fetchThreads, fetchTopology, followThread } from "./api";
+import { fetchThreads, fetchTopology, followThread, type Link } from "./api";
 import type { LiveSummary, RunEvent, Topology } from "./contract";
 import { LEGEND } from "./kinds";
 import { activity, layout, trail } from "./layout";
@@ -12,6 +12,19 @@ import { fold, hostNode, type Span } from "./spans";
 const POLL_MS = 2000;
 const EMPTY = { nodes: [], edges: [] };
 
+// The graph refits when its pane changes size — a window resized, the panel moved below — never while a run goes on.
+function FitOnResize() {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    const pane = document.querySelector(".canvas");
+    if (!pane) return;
+    const observer = new ResizeObserver(() => fitView({ padding: 0.1 }));
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, [fitView]);
+  return null;
+}
+
 function initialThread(): string {
   return new URLSearchParams(window.location.search).get("thread") ?? "";
 }
@@ -22,7 +35,7 @@ export function App() {
   const [thread, setThread] = useState(initialThread);
   const [frames, setFrames] = useState<RunEvent[]>([]);
   const [run, setRun] = useState("");
-  const [online, setOnline] = useState(false);
+  const [link, setLink] = useState<Link>("idle");
   const [picked, setPicked] = useState<Pick>(null);
 
   useEffect(() => {
@@ -64,7 +77,7 @@ export function App() {
         pending.push(event);
         scheduled ||= window.requestAnimationFrame(flush);
       },
-      setOnline,
+      setLink,
     );
     return () => {
       stop();
@@ -135,7 +148,9 @@ export function App() {
           ))}
           <span className="states">◌ running · ✓ done · ✕ error</span>
         </span>
-        <span className={`online ${online ? "on" : "off"}`}>{online ? "live" : "reconnecting"}</span>
+        <span className={`link ${link}`} title="the event stream of the chosen thread">
+          {link}
+        </span>
       </header>
       <main>
         <div className="canvas">
@@ -157,6 +172,7 @@ export function App() {
             >
               <Background gap={24} />
               <Controls showInteractive={false} />
+              <FitOnResize />
             </ReactFlow>
           </LiveContext.Provider>
         </div>

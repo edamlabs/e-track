@@ -14,6 +14,9 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   (`evaluation`, `interrupt`, `state`, yellow), joins model, action and delegation, validated as a set on the canvas
   surface (worst CVD ΔE 9.4, normal ΔE 16.8); a plain step is grey. Titles are the label alone; the technical name is
   in the node card. Frames reach React once per animation frame and fold in O(frames).
+- Viewer layout fits the window: the panel is capped at a third of the width, and under 900 px it moves below the
+  canvas; the bar wraps; the graph refits when its pane changes size, never while a run goes on. The stream's state
+  reads `idle`, `connecting`, `live` or `reconnecting` — no longer `reconnecting` before any stream was opened.
 
 ### Fixed
 
@@ -25,7 +28,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 - Browser integration tests: chromium watches the canvas while a deep agent runs under it and samples every 40 ms —
   the node set constant, none hidden, the viewport never refitted, the slow node seen lit, counts, family borders,
-  and the replay drawing what the live run drew. Red on the previous canvas, green five runs in a row.
+  and the replay drawing what the live run drew; the layout on a wide and a narrow window; the viewer mounted under a
+  prefix in a FastAPI and in a Litestar app. Red on the previous canvas, green run after run.
 
 ## [0.3.0] — 2026-11-04
 

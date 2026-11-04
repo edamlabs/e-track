@@ -52,3 +52,26 @@ async def test_canvas_replay_draws_what_live_drew(served: tuple[Run, Open, froze
     assert await canvas.text("model", "counts") == "llm 2"
     assert await canvas.text("tools", "counts") == "subagent 1"
     assert await canvas.arcs("hot") == 1
+
+
+@pytest.mark.parametrize(("width", "below"), [(1280, False), (760, True)], ids=["wide", "narrow"])
+async def test_canvas_fits_the_window(served: tuple[Run, Open, frozenset[str]], width: int, below: bool) -> None:
+    _, open_canvas, declared = served
+    canvas = await open_canvas(width, 900)
+    await canvas.drawn(len(declared))
+    await canvas.link("live")
+    pane, panel, nodes = await canvas.boxes()
+    ### the panel never crowds the graph out: beside it up to its cap, under it on a narrow window.
+    assert (panel["y"] >= pane["y"] + pane["height"] - 1) is below
+    assert panel["width"] <= (width if below else 420)
+    assert all(pane["x"] <= node["x"] and node["x"] + node["width"] <= pane["x"] + pane["width"] for node in nodes)
+
+
+@pytest.mark.parametrize("host", ["fastapi", "litestar"], indirect=True)
+async def test_canvas_mounted_in_a_web_app(served: tuple[Run, Open, frozenset[str]]) -> None:
+    run, open_canvas, declared = served
+    await run()
+    canvas = await open_canvas()
+    await canvas.drawn(len(declared))
+    await canvas.settled("llm 2")
+    assert await canvas.text("tools", "counts") == "subagent 1"

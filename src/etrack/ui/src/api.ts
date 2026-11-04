@@ -11,15 +11,22 @@ export async function fetchThreads(): Promise<LiveSummary[]> {
   return (await reply.json()) as LiveSummary[];
 }
 
+// The stream's state as a person reads it: no thread chosen, opening, open, or lost and being retried.
+export type Link = "idle" | "connecting" | "live" | "reconnecting";
+
 // EventSource reconnects by itself and resends Last-Event-ID: the server replays what the cursor missed.
 export function followThread(
   thread: string,
   onFrame: (event: RunEvent) => void,
-  onState: (open: boolean) => void,
+  onState: (link: Link) => void,
 ): () => void {
+  onState("connecting");
   const source = new EventSource(`api/threads/${encodeURIComponent(thread)}/events`);
   source.addEventListener("frame", (message) => onFrame(JSON.parse((message as MessageEvent<string>).data)));
-  source.onopen = () => onState(true);
-  source.onerror = () => onState(false);
-  return () => source.close();
+  source.onopen = () => onState("live");
+  source.onerror = () => onState("reconnecting");
+  return () => {
+    source.close();
+    onState("idle");
+  };
 }
