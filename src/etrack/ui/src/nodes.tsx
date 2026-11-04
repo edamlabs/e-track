@@ -5,9 +5,13 @@ import type { CallData, StageData } from "./layout";
 export function StageNode({ data, selected }: NodeProps<Node<StageData>>) {
   const renamed = data.title !== data.name;
   return (
-    <div className={`stage ${data.status} ${data.edge} ${selected ? "selected" : ""}`} title={data.name}>
+    <div
+      className={`stage fam-${data.family} ${data.status} ${data.edge} ${selected ? "selected" : ""}`}
+      title={data.name}
+    >
       <Handle type="target" position={Position.Top} />
       <span className={`glyph ${data.status}`}>{STATUS_GLYPH[data.status]}</span>
+      {data.kind !== "node" && <span className="kind">{data.kind}</span>}
       <span className="text">
         <span className="label">{data.title}</span>
         {renamed && <span className="name">{data.name}</span>}

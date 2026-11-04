@@ -7,17 +7,20 @@ from typing import Protocol, runtime_checkable
 
 import msgspec
 
+from etrack.models.event import EventKind
 from etrack.ports.provider import Provider
 
 
 ##### VALUES #####
 class TopologyNode(msgspec.Struct, frozen=True, kw_only=True):
-    """One declared node: its id, the name a span carries when it runs, the label a person reads, its place once laid
-    out. `name` ties the node to its spans and never changes; `label` is display only — empty, the name is shown."""
+    """One declared node: its id, the name a span carries when it runs, the label a person reads, what it is, its place
+    once laid out. `name` ties the node to its spans and never changes; `label` is display only — empty, the name is
+    shown; `kind` is its nature in the spans' vocabulary (an agent, a tool, a model call…) — a plain step is a `NODE`."""
 
     id: str
     name: str
     label: str = ""
+    kind: EventKind = EventKind.NODE
     entry: bool = False
     exit: bool = False
     rank: int = 0
