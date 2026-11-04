@@ -3,7 +3,7 @@
 import asyncio
 import threading
 import time
-from typing import ClassVar
+from typing import TYPE_CHECKING
 
 import anyio
 import msgspec
@@ -11,17 +11,13 @@ import pytest
 
 from etrack.infra.config.providers.adapters.bus.anyio import AnyioSettings
 from etrack.infra.errors import BusError
-from etrack.models.event import EventPhase, EventView, LogView, RunEvent
+from etrack.models.event import EventPhase, LogView, RunEvent
 from etrack.ports.bus import BusPort
 from etrack.providers.adapters.bus.anyio import AnyioAdapter
 from unit.etrack.conftest import BrokenSink, RecordingSink, SlowSink, frame
 
-
-class EndsOnly(RecordingSink):
-    """A sink that only takes closes, narrowed to the log view."""
-
-    view: ClassVar[type[EventView]] = LogView
-    phases: ClassVar[frozenset[EventPhase]] = frozenset({EventPhase.END})
+if TYPE_CHECKING:
+    from unit.etrack.providers.adapters.bus.conftest import EndsOnly
 
 
 async def test_anyio_meets_port() -> None:
@@ -43,8 +39,7 @@ async def test_anyio_subscribe_after_open(recording: RecordingSink) -> None:
     assert len(recording.views) == 1
 
 
-async def test_anyio_phases_and_view() -> None:
-    ends = EndsOnly()
+async def test_anyio_phases_and_view(ends: EndsOnly) -> None:
     async with AnyioAdapter() as bus:
         bus.subscribe(ends)
         bus.publish(frame(0, EventPhase.START))

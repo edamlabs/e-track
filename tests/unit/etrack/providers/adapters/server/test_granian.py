@@ -2,7 +2,7 @@
 
 import socket
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -14,21 +14,11 @@ from etrack.providers.adapters.server import granian as module
 from etrack.providers.adapters.server.granian import GranianAdapter
 from support.port import free_port
 
-
-async def hello(scope: dict[str, Any], receive: Any, send: Any) -> None:
-    """The smallest ASGI app: 200 and a word, lifespan accepted."""
-    match scope["type"]:
-        case "lifespan":
-            ### a lifespan loop answers every message until shutdown.
-            while (message := await receive())["type"] != "lifespan.shutdown":
-                await send({"type": f"{message['type']}.complete"})
-            await send({"type": "lifespan.shutdown.complete"})
-        case _:
-            await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"text/plain")]})
-            await send({"type": "http.response.body", "body": b"hello"})
+if TYPE_CHECKING:
+    from unit.etrack.providers.adapters.server.conftest import Asgi
 
 
-async def test_granian_meets_port_and_serves() -> None:
+async def test_granian_meets_port_and_serves(hello: Asgi) -> None:
     settings = GranianSettings(port=free_port())
     async with GranianAdapter(hello, settings) as server, httpx.AsyncClient() as client:
         assert isinstance(server, ServerPort)
@@ -38,7 +28,7 @@ async def test_granian_meets_port_and_serves() -> None:
     assert not await server.health()
 
 
-async def test_granian_refuses_taken_port() -> None:
+async def test_granian_refuses_taken_port(hello: Asgi) -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as taken:
         taken.bind(("127.0.0.1", 0))
         taken.listen()
@@ -47,7 +37,7 @@ async def test_granian_refuses_taken_port() -> None:
             await GranianAdapter(hello, settings).__aenter__()
 
 
-async def test_granian_boot_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_granian_boot_timeout(monkeypatch: pytest.MonkeyPatch, hello: Asgi) -> None:
     async def never(*_: object) -> bool:
         return False
 
@@ -58,7 +48,7 @@ async def test_granian_boot_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not await adapter.health()
 
 
-async def test_granian_server_dies_before_answering(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_granian_server_dies_before_answering(monkeypatch: pytest.MonkeyPatch, hello: Asgi) -> None:
     class Dead:
         def __init__(self, *_: object, **__: object) -> None: ...
 
@@ -75,7 +65,7 @@ async def test_granian_server_dies_before_answering(monkeypatch: pytest.MonkeyPa
     assert not await adapter.health()
 
 
-async def test_granian_exit_unopened() -> None:
+async def test_granian_exit_unopened(hello: Asgi) -> None:
     adapter = GranianAdapter(hello, GranianSettings(port=free_port()))
     await adapter.__aexit__(None, None, None)
     assert not await adapter.health()
