@@ -4,6 +4,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-04
+
 ### Added
 
 - Extras, as structlog takes them: any key the record's model does not declare — a keyword to the channel, a key bound
