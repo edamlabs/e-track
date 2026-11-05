@@ -16,14 +16,14 @@ from collections import Counter
 from contextlib import suppress
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, Unpack
 
 import anyio
 from anyio.streams.memory import MemoryObjectSendStream
 
+from etrack.infra import defaults
 from etrack.infra.errors import BusError
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.models.event import RunEvent
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     from anyio.streams.memory import MemoryObjectReceiveStream
 
-    from etrack.infra.config.providers.adapters.bus.anyio import AnyioSettings
+    from etrack.infra.config.providers import AnyioConfig
     from etrack.ports.bus import Select
     from etrack.ports.sink import SinkPort
 
@@ -53,10 +53,11 @@ class AnyioAdapter:
 
     spec: ClassVar[ProviderSpec] = ProviderSpec("anyio", Locality.EMBEDDED, Workload.IO_BOUND, Isolation.LOOP)
 
-    __slots__ = ("_dropped", "_failed", "_feed", "_loop", "_settings", "_subs", "_supervisor", "_thread")
+    __slots__ = ("_conf", "_dropped", "_failed", "_feed", "_loop", "_subs", "_supervisor", "_thread")
 
-    def __init__(self, settings: AnyioSettings | None = None) -> None:
-        self._settings = settings
+    def __init__(self, **given: Unpack[AnyioConfig]) -> None:
+        """Keyword arguments as `AnyioConfig` names them; what is not given, ETRACK_BUS_* fills (`infra/defaults`)."""
+        self._conf = defaults.anyio(**given)
         self._subs: list[Subscription] = []
         self._dropped: Counter[str] = Counter()
         self._failed: Counter[str] = Counter()
@@ -69,7 +70,7 @@ class AnyioAdapter:
 
     @property
     def _common_capacity(self) -> int:
-        return (self._settings or st.providers.adapters.bus.anyio).capacity
+        return self._conf["capacity"]
 
     def _subscribe_start(self, sub: Subscription) -> None:
         ### the group is not thread-safe and only its supervisor may spawn: a foreign thread hops onto the loop first.

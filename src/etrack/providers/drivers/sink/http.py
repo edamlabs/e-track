@@ -15,23 +15,23 @@ A custom driver subclasses it and overrides what it must, nothing else:
 
 import asyncio
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Self, Unpack
 
 import httpx
 import msgspec
 
+from etrack.infra import defaults
 from etrack.infra.auth import AuthSigner
-from etrack.infra.config.providers.drivers.sink.http import Encoding
+from etrack.infra.config.providers import Encoding
 from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.models.event import EventPhase, EventView, RunEvent
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from etrack.infra.config.providers.drivers.sink.http import HttpSettings
+    from etrack.infra.config.providers import HttpConfig
 
 PHASES: Final[frozenset[EventPhase]] = frozenset(
     {EventPhase.START, EventPhase.END, EventPhase.ERROR, EventPhase.INSTANT}
@@ -62,10 +62,11 @@ class HttpDriver:
     view: ClassVar[type[EventView]] = RunEvent
     phases: ClassVar[frozenset[EventPhase]] = PHASES
 
-    __slots__ = ("_batch", "_client", "_failed", "_lock", "_sent", "_settings", "_signer", "_ticker")
+    __slots__ = ("_batch", "_client", "_conf", "_failed", "_lock", "_sent", "_signer", "_ticker")
 
-    def __init__(self, settings: HttpSettings | None = None) -> None:
-        self._settings = settings
+    def __init__(self, **given: Unpack[HttpConfig]) -> None:
+        """Keyword arguments as `HttpConfig` names them; what is not given, ETRACK_HTTP_* fills (`infra/defaults`)."""
+        self._conf = defaults.http(**given)
         self._batch: list[Any] = []
         self._lock = asyncio.Lock()
         self._client: httpx.AsyncClient | None = None
@@ -75,10 +76,6 @@ class HttpDriver:
         self._failed = 0
 
     ##### PRIVATE #####
-
-    @property
-    def _common_settings(self) -> HttpSettings:
-        return self._settings or st.providers.drivers.sink.http
 
     def _common_client(self) -> tuple[httpx.AsyncClient, AuthSigner]:
         match self._client, self._signer:
@@ -90,7 +87,7 @@ class HttpDriver:
 
     async def _enter_tick(self) -> None:
         ### a timer is a loop by nature, alive as long as the driver: a batch never waits longer than `flush`.
-        wait = self._common_settings.flush.total_seconds()
+        wait = self._conf["flush"].total_seconds()
         while True:
             await asyncio.sleep(wait)
             try:
@@ -99,26 +96,28 @@ class HttpDriver:
                 logger.warning("http flush failed", sink=self.spec.name, error=failure.message)
 
     async def _flush_post(self, content: bytes, kind: str, attempt: int = 0) -> None:
-        config = self._common_settings
+        config = self._conf
         client, signer = self._common_client()
         headers = {
-            **{key: secret.get_secret_value() for key, secret in config.headers.items()},
+            **{key: secret.get_secret_value() for key, secret in config["headers"].items()},
             **await signer.headers(),
             "Content-Type": kind,
         }
         try:
-            reply = await client.request(config.method, config.endpoint, content=content, headers=headers)
+            reply = await client.request(config["method"], config["endpoint"], content=content, headers=headers)
             status, reason = reply.status_code, f"{reply.status_code} {reply.text[:200]}"
         except httpx.TransportError as failure:
             status, reason = 0, f"{type(failure).__name__}: {failure}"
         match status:
             case ok if 200 <= ok < 300:  # noqa: PLR2004 — the 2xx class
                 return
-            case again if (again == 0 or again in RETRIED) and attempt < config.retries:
-                await asyncio.sleep(config.backoff.total_seconds() * 2**attempt)
+            case again if (again == 0 or again in RETRIED) and attempt < config["retries"]:
+                await asyncio.sleep(config["backoff"].total_seconds() * 2**attempt)
                 await self._flush_post(content, kind, attempt + 1)
             case _:
-                msg = f"{self.spec.name}: {config.endpoint} refused the batch after {attempt + 1} attempts — {reason}"
+                msg = (
+                    f"{self.spec.name}: {config['endpoint']} refused the batch after {attempt + 1} attempts — {reason}"
+                )
                 raise SinkError(msg)
 
     ############################################################
@@ -127,7 +126,7 @@ class HttpDriver:
 
     def accept(self, view: EventView) -> bool:
         """Whether this event is sent: by default, every kind or the configured ones."""
-        kinds = self._common_settings.kinds
+        kinds = self._conf["kinds"]
         return not kinds or getattr(view, "kind", None) in kinds
 
     def encode(self, view: EventView) -> Any:
@@ -136,16 +135,16 @@ class HttpDriver:
 
     def body(self, items: Sequence[Any]) -> tuple[bytes, str]:
         """The request body and its content type: by default, the configured encoding."""
-        return BODIES[self._common_settings.encoding](items)
+        return BODIES[self._conf["encoding"]](items)
 
     ##### PUBLIC #####
 
     async def __aenter__(self) -> Self:
-        config = self._common_settings
-        self._signer = await AuthSigner(config.auth).ready()
-        self._client = httpx.AsyncClient(timeout=config.timeout.total_seconds())
+        config = self._conf
+        self._signer = await AuthSigner(config["auth"]).ready()
+        self._client = httpx.AsyncClient(timeout=config["timeout"].total_seconds())
         self._ticker = asyncio.create_task(self._enter_tick())
-        logger.info("http opened", sink=self.spec.name, endpoint=config.endpoint, batch=config.batch)
+        logger.info("http opened", sink=self.spec.name, endpoint=config["endpoint"], batch=config["batch"])
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -170,7 +169,7 @@ class HttpDriver:
         """Add the event to the batch; a full batch leaves at once."""
         self._common_client()
         _ = self.accept(view) and self._batch.append(self.encode(view))
-        _ = len(self._batch) >= self._common_settings.batch and await self.flush()
+        _ = len(self._batch) >= self._conf["batch"] and await self.flush()
 
     async def flush(self) -> int:
         """Send what is batched now; how many events left. A refusal drops the batch and raises."""

@@ -11,11 +11,10 @@ import httpx
 import pytest
 import structlog
 from prometheus_client.parser import text_string_to_metric_families
+from pydantic import SecretStr
 
 from etrack.infra.config.auth import BearerAuth
-from etrack.infra.config.base import Secret
-from etrack.infra.config.providers.adapters.server.granian import GranianSettings
-from etrack.infra.config.providers.drivers.sink.http import HttpSettings
+from etrack.infra.config.providers import HttpConfig
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.providers.adapters.bus.anyio import AnyioAdapter
@@ -38,10 +37,10 @@ async def test_sinks_run_reaches_http_and_prometheus(
     deep_agent: Callable[[], Any], httpserver: HTTPServer, wait: float
 ) -> None:
     endpoint = fake_endpoint(httpserver)
-    config = HttpSettings(
-        endpoint=endpoint.url, auth=BearerAuth(token=Secret("t")), batch=5, flush=timedelta(milliseconds=50)
+    config = HttpConfig(
+        endpoint=endpoint.url, auth=BearerAuth(token=SecretStr("t")), batch=5, flush=timedelta(milliseconds=50)
     )
-    async with HttpDriver(config) as http, PrometheusAdapter() as metrics:
+    async with HttpDriver(**config) as http, PrometheusAdapter() as metrics:
         bus = AnyioAdapter()
         bus.subscribe(http)
         bus.subscribe(metrics)
@@ -50,7 +49,7 @@ async def test_sinks_run_reaches_http_and_prometheus(
             with structlog.contextvars.bound_contextvars(tenant="acme"), tracker.track("sinks", {}) as tracked:
                 await deep_agent().ainvoke({"messages": [("user", "¿qué es una póliza?")]}, tracked.config)
         async with (
-            GranianAdapter(metrics.app, GranianSettings(port=free_port())) as server,
+            GranianAdapter(metrics.app, port=free_port()) as server,
             httpx.AsyncClient(base_url=server.url, timeout=wait) as client,
         ):
             scraped = (await client.get("/")).text

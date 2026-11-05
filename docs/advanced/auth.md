@@ -24,9 +24,9 @@ Or in code:
 
 ```python
 from etrack.infra.config.auth import BasicAuth, BearerAuth, GoogleAuth, HeadersAuth
-from etrack.infra.config.base import Secret
+from pydantic import SecretStr
 
-BearerAuth(token=Secret("…"))
+BearerAuth(token=SecretStr("…"))
 GoogleAuth(quota_project="my-project")
 ```
 

@@ -5,17 +5,17 @@ tokens by type and their cost; runs in flight are a gauge. The registry is the a
 collide. Prometheus scrapes `app` — mount it in the host (`/metrics`) or serve it with `GranianAdapter` — and Grafana
 reads Prometheus. Names stay bounded: a span's name is its node, tool or model, never a free text."""
 
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self, Unpack
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, make_asgi_app
 
+from etrack.infra import defaults
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.models.event import EventKind, EventPhase, EventView, Failure, ModelRef, Usage
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
 if TYPE_CHECKING:
-    from etrack.infra.config.providers.adapters.sink.prometheus import PrometheusSettings
+    from etrack.infra.config.providers import PrometheusConfig
     from etrack.ports.server import Asgi
 
 MS: Final[float] = 1000.0
@@ -41,17 +41,17 @@ class PrometheusAdapter:
     view: ClassVar[type[EventView]] = PrometheusView
     phases: ClassVar[frozenset[EventPhase]] = frozenset({EventPhase.START, EventPhase.END, EventPhase.ERROR})
 
-    __slots__ = ("_active", "_cost", "_latency", "_open", "_registry", "_settings", "_spans", "_tokens")
+    __slots__ = ("_active", "_conf", "_cost", "_latency", "_open", "_registry", "_spans", "_tokens")
 
-    def __init__(self, settings: PrometheusSettings | None = None) -> None:
-        config = settings or st.providers.adapters.sink.prometheus
-        self._settings = config
+    def __init__(self, **given: Unpack[PrometheusConfig]) -> None:
+        """Keyword arguments as `PrometheusConfig` names them; what is not given, ETRACK_PROMETHEUS_* fills."""
+        config = self._conf = defaults.prometheus(**given)
         self._registry = CollectorRegistry()
         self._open = False
-        ns, registry = config.namespace, self._registry
+        ns, registry = config["namespace"], self._registry
         self._spans = Counter("spans", "Closed spans", ["kind", "name", "status"], namespace=ns, registry=registry)
         self._latency = Histogram(
-            "span_seconds", "Span latency", ["kind", "name"], namespace=ns, registry=registry, buckets=config.buckets
+            "span_seconds", "Span latency", ["kind", "name"], namespace=ns, registry=registry, buckets=config["buckets"]
         )
         self._active = Gauge("runs_active", "Runs in flight", namespace=ns, registry=registry)
         self._tokens = Counter("tokens", "Model tokens", ["model", "type"], namespace=ns, registry=registry)
@@ -88,7 +88,7 @@ class PrometheusAdapter:
 
     async def __aenter__(self) -> Self:
         self._open = True
-        logger.info("prometheus opened", namespace=self._settings.namespace)
+        logger.info("prometheus opened", namespace=self._conf["namespace"])
         return self
 
     async def __aexit__(self, *exc: object) -> None:

@@ -9,7 +9,7 @@ import anyio
 import msgspec
 import pytest
 
-from etrack.infra.config.providers.adapters.bus.anyio import AnyioSettings
+from etrack.infra.config.providers import AnyioConfig
 from etrack.infra.errors import BusError
 from etrack.models.event import EventPhase, LogView, RunEvent
 from etrack.ports.bus import BusPort
@@ -59,7 +59,7 @@ async def test_anyio_broken_sink_isolated(recording: RecordingSink) -> None:
 
 async def test_anyio_slow_sink_never_blocks() -> None:
     slow = SlowSink()
-    async with AnyioAdapter(AnyioSettings(capacity=5)) as bus:
+    async with AnyioAdapter(**AnyioConfig(capacity=5)) as bus:
         bus.subscribe(slow)
         began = time.perf_counter()
         _ = [bus.publish(frame(seq)) for seq in range(100)]

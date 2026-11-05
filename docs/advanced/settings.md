@@ -1,14 +1,19 @@
 # Settings
 
-Every provider reads its settings from the environment (or a `.env` file) on first use, never at import. Pass a
-settings object to a provider's constructor to override them in code — tests do.
+e-track reads the environment (and a `.env` file) once, when it is first imported. Every provider takes keyword
+arguments; what you do not pass is filled from these variables — `OtlpDriver()` uses them all, `OtlpDriver(targets=…)`
+overrides one and keeps the rest. A keyword argument out of range is refused at construction, as a variable is.
 
 ```python
-from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
+from etrack.infra.config.providers import OtlpTarget
 
 target = OtlpTarget(endpoint="http://localhost:6006")
-otlp = OtlpDriver(OtlpSettings(targets={"phoenix": target}))
+otlp = OtlpDriver(targets={"phoenix": target})
 ```
+
+Each provider's arguments are a `TypedDict` in `etrack.infra.config.providers` — `OtlpConfig`, `HttpConfig`,
+`AnyioConfig`, `LiveConfig`, `GranianConfig`, `PrometheusConfig` — so an editor completes them and a type checker
+checks them. Set the variables before the first `import etrack…`; a variable set later is not read.
 
 ## All of them
 
@@ -29,7 +34,7 @@ otlp = OtlpDriver(OtlpSettings(targets={"phoenix": target}))
 | `ETRACK_SERVER_PORT` | `28130` | `GranianAdapter` | |
 | `ETRACK_SERVER_BOOT` | `10s` | `GranianAdapter` | how long opening waits for the socket |
 
-Durations take ISO 8601 (`PT10S`) or seconds (`10`). JSON values are validated on load: a malformed target fails at
+Durations take ISO 8601 (`PT10S`) or `HH:MM:SS` (`00:00:10`); a bare number is refused. JSON values are validated on load: a malformed target fails at
 startup, not on the first export.
 
 ## Errors

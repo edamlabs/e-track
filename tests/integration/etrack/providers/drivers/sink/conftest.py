@@ -19,7 +19,7 @@ from support.model import call, script
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings
+    from etrack.infra.config.providers import OtlpConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +38,7 @@ def project() -> str:
 
 
 @pytest.fixture
-def deep_run() -> Callable[[OtlpSettings], Awaitable[Run]]:
+def deep_run() -> Callable[[OtlpConfig], Awaitable[Run]]:
     """Runs a deep agent that delegates to a subagent, which calls an MCP tool — tracked into live and otlp."""
     spanned = frozenset({EventPhase.START, EventPhase.INSTANT})
 
@@ -47,7 +47,7 @@ def deep_run() -> Callable[[OtlpSettings], Awaitable[Run]]:
         """Run a SPARQL query."""
         return "seg:Poliza"
 
-    async def run(settings: OtlpSettings) -> Run:
+    async def run(settings: OtlpConfig) -> Run:
         agent = create_deep_agent(
             model=script(
                 call("task", "c1", subagent_type="ontologo", description="resuelve Poliza"),
@@ -60,7 +60,7 @@ def deep_run() -> Callable[[OtlpSettings], Awaitable[Run]]:
             ],
         )
         kept: list[RunEvent] = []
-        async with LiveAdapter() as live, OtlpDriver(settings) as otlp:
+        async with LiveAdapter() as live, OtlpDriver(**settings) as otlp:
             bus = AnyioAdapter()
             ### the live sink's policy keeps a copy of what reached it: every frame, every phase.
             bus.subscribe(live, select=lambda event: kept.append(event) or event)

@@ -6,8 +6,26 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- **Settings follow the house law** (`docs/decisions.md`, 2026-11-05). One `ProviderSettings` cluster of UPPERCASE
+  fields named as their variables, one `Settings` read once at import, and `infra/defaults` as the library's root.
+  Every `ETRACK_*` variable is read as before; `OtlpDriver()`, `HttpDriver()` and the other providers built with no
+  argument still configure themselves from the environment.
+- **Overriding in code takes keyword arguments** (minor, pre-1.0): `OtlpDriver(targets={...})` replaces
+  `OtlpDriver(OtlpSettings(targets={...}))`, and likewise for `HttpDriver`, `AnyioAdapter`, `LiveAdapter`,
+  `GranianAdapter(app, port=…)` and `PrometheusAdapter`. The per-provider settings classes (`OtlpSettings`,
+  `HttpSettings`…) are gone; their keyword arguments are typed `TypedDict`s (`OtlpConfig`, `HttpConfig`…), and
+  `OtlpTarget` and `Encoding` move to `etrack.infra.config.providers`. `Secret` from `etrack.infra.config.base` is
+  pydantic's `SecretStr`.
+- The environment is read when e-track is first imported, no longer at a provider's first use: set `ETRACK_*` before
+  the first import. Durations read ISO 8601 (`PT10S`) or `HH:MM:SS` — the docs said a bare number of seconds was
+  accepted; it never was.
+
 - The package description and keywords say what e-track is now: parallel sinks (OpenTelemetry, Langfuse, Cloud Trace,
   Prometheus, HTTP) and a live graph viewer — the same text as the repository's About on GitHub.
+
+### Removed
+
+- `etrack.infra.proxy.LazyProxy` and `etrack.ops.file.FileFinder`: they served only the lazy settings composer.
 
 ## [0.5.0] — 2026-11-04
 

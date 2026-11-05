@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Final
 
 PACKAGE: Final = Path(__file__).resolve().parents[2] / "src" / "etrack"
-CONFIG: Final = PACKAGE / "infra" / "config"
 LIMIT: Final = 120
 LIFECYCLE: Final = ("__aenter__", "__aexit__", "health")
 FORBIDDEN: Final[dict[str, frozenset[str]]] = {
@@ -78,7 +77,6 @@ EVERY: Final = modules(".")
 PROVIDERS: Final = providers()
 PORTS: Final = frozenset(path.stem for path in modules("ports")) - {"provider"}
 BRANDS: Final = Counter(cls.__module__.split(".")[-1] for _, cls in PROVIDERS)
-CONFIGS: Final = sorted((CONFIG / "providers").rglob("*.py"))
 MODULES: Final = [
     (path.relative_to(PACKAGE).with_suffix("").as_posix(), ast.get_docstring(ast.parse(path.read_text("utf-8"))))
     for path in sorted(PACKAGE.rglob("*.py"))

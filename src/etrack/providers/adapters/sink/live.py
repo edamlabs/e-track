@@ -9,12 +9,12 @@ wrote — what a viewer offers to pick from."""
 
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self, Unpack
 
 import anyio
 
+from etrack.infra import defaults
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.models.event import EventPhase, RunEvent
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 from etrack.ports.sink import LiveFrame, LiveSummary
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from anyio.streams.memory import MemoryObjectSendStream
 
-    from etrack.infra.config.providers.adapters.sink.live import LiveSettings
+    from etrack.infra.config.providers import LiveConfig
     from etrack.models.event import EventView
 
 PHASES: Final[frozenset[EventPhase]] = frozenset(EventPhase)
@@ -49,17 +49,14 @@ class LiveAdapter:
     view: ClassVar[type[EventView]] = RunEvent
     phases: ClassVar[frozenset[EventPhase]] = PHASES
 
-    __slots__ = ("_settings", "_threads")
+    __slots__ = ("_conf", "_threads")
 
-    def __init__(self, settings: LiveSettings | None = None) -> None:
-        self._settings = settings
+    def __init__(self, **given: Unpack[LiveConfig]) -> None:
+        """Keyword arguments as `LiveConfig` names them; what is not given, ETRACK_LIVE_* fills (`infra/defaults`)."""
+        self._conf = defaults.live(**given)
         self._threads: OrderedDict[str, LiveThread] = OrderedDict()
 
     ##### PRIVATE #####
-
-    @property
-    def _common_settings(self) -> LiveSettings:
-        return self._settings or st.providers.adapters.sink.live
 
     def _common_thread(self, thread: str) -> LiveThread:
         match self._threads.get(thread):
@@ -67,9 +64,9 @@ class LiveAdapter:
                 self._threads.move_to_end(thread)
                 return known
             case _:
-                created = LiveThread(buffer=deque(maxlen=self._common_settings.buffer))
+                created = LiveThread(buffer=deque(maxlen=self._conf["buffer"]))
                 self._threads[thread] = created
-                _ = len(self._threads) > self._common_settings.threads and self._send_evict()
+                _ = len(self._threads) > self._conf["threads"] and self._send_evict()
                 return created
 
     def _send_evict(self) -> None:
@@ -95,7 +92,7 @@ class LiveAdapter:
     ##### PUBLIC #####
 
     async def __aenter__(self) -> Self:
-        logger.info("live opened", buffer=self._common_settings.buffer, threads=self._common_settings.threads)
+        logger.info("live opened", buffer=self._conf["buffer"], threads=self._conf["threads"])
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -121,7 +118,7 @@ class LiveAdapter:
     async def watch(self, thread: str, after: int = -1) -> AsyncIterator[LiveFrame]:
         """The thread's kept frames past `after`, then every new one, until the watcher lags, is evicted or leaves."""
         watched = self._common_thread(thread)
-        send, receive = anyio.create_memory_object_stream[LiveFrame](self._common_settings.backlog)
+        send, receive = anyio.create_memory_object_stream[LiveFrame](self._conf["backlog"])
         ### replay and registration happen with no await between them: no frame falls in the gap.
         replay = [frame for frame in watched.buffer if frame.offset > after]
         watched.watchers.add(send)

@@ -1,12 +1,11 @@
-"""infra/config/base: pydantic-settings — frozen, typed, layered config.
+"""infra/config/base: pydantic-settings — frozen, typed, layered config, one shape for every cluster.
 
-This module wires the five layers every scope shares: config file < secrets < .env < environment <
-kwargs. `Secret` is pydantic's `SecretStr`: masked through repr, str and f-strings, readable only
-via `.get_secret_value()`. All sub-settings inherit from here."""
+Every cluster inherits from here, and `infra/settings` merges them into the one `Settings`. The layers, lowest first:
+config file < secrets < `.env` < environment < kwargs. A field is its environment variable, UPPERCASE, exact: there
+is no prefix to add and no alias to remember. Credentials are `SecretStr`, masked everywhere but at the wire."""
 
 from typing import Final
 
-from pydantic import SecretStr
 from pydantic_settings import (
     BaseSettings as SettingsBase,
 )
@@ -18,8 +17,6 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
-Secret = SecretStr
-
 FILE_SOURCES: Final = (
     ("toml_file", TomlConfigSettingsSource),
     ("yaml_file", YamlConfigSettingsSource),
@@ -28,17 +25,15 @@ FILE_SOURCES: Final = (
 
 
 class BaseSettings(SettingsBase):
-    """Subclass and declare typed fields; the constructor merges every layer in one pass.
+    """Subclass and declare typed UPPERCASE fields; the constructor merges every layer in one pass.
 
-    A scope narrows its own sources through ``model_config``: ``env_prefix``, ``env_file``,
-    ``toml_file`` / ``yaml_file`` / ``json_file``, ``secrets_dir`` (set ``/run/secrets`` there when
-    it is containerized — an absent default directory warns). Complex values in env or .env are
-    JSON-decoded; enums, paths and timedeltas validate on load, never at runtime."""
+    Complex values in env or .env are JSON-decoded; enums, paths and timedeltas validate on load, never at runtime.
+    A `timedelta` reads ISO 8601 (`PT7S`) or `HH:MM:SS` from the environment."""
 
     model_config = SettingsConfigDict(
         frozen=True,
-        ### every scope reads the one shared .env: each takes its own keys and ignores the others' — forbidding
-        ### extras would make any foreign key (REDIS_URL, SECRET...) abort every other scope at load.
+        ### the .env is the host's: ETRACK_* is ours and every other key is ignored — forbidding extras would make any
+        ### foreign key (REDIS_URL, SECRET...) abort the load.
         extra="ignore",
         env_file=".env",
         env_nested_delimiter="__",

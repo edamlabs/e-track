@@ -59,10 +59,9 @@ generated reference under **Reference** in the navigation.
 
 | | Import |
 |---|---|
-| `AnyioSettings` | `from etrack.infra.config.providers.adapters.bus.anyio import AnyioSettings` |
-| `LiveSettings` | `from etrack.infra.config.providers.adapters.sink.live import LiveSettings` |
-| `OtlpSettings`, `OtlpTarget` | `from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget` |
-| `GranianSettings` | `from etrack.infra.config.providers.adapters.server.granian import GranianSettings` |
+| `OtlpTarget`, `Encoding` | `from etrack.infra.config.providers import OtlpTarget, Encoding` |
+| `OtlpConfig`, `HttpConfig`, `AnyioConfig`, `LiveConfig`, `GranianConfig`, `PrometheusConfig` | `from etrack.infra.config.providers import …` — each provider's keyword arguments |
+| `BearerAuth` and the other auths | `from etrack.infra.config.auth import NoAuth, HeadersAuth, BearerAuth, BasicAuth, GoogleAuth` |
 | `CoreError` and its family | `from etrack.infra.errors import CoreError, ChannelError, BusError, SinkError, SourceError, ServerError, LayoutError` |
 
 Every variable each setting reads → [Settings](../advanced/settings.md).

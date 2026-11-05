@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage
 from litestar.testing import AsyncTestClient
 
 from etrack.api.viewer import DIST, ViewerApi
-from etrack.infra.config.providers.adapters.server.granian import GranianSettings
+from etrack.infra.config.providers import GranianConfig
 from etrack.ports.topology import Topology
 from etrack.providers.adapters.server.granian import GranianAdapter
 from etrack.providers.adapters.sink.live import LiveAdapter
@@ -64,9 +64,9 @@ async def test_viewer_api_events_replay(
     offsets: list[str],
 ) -> None:
     live = await filled(3)
-    settings = GranianSettings(port=free_port())
+    settings = GranianConfig(port=free_port())
     async with (
-        GranianAdapter(ViewerApi(topology, live).asgi, settings) as server,
+        GranianAdapter(ViewerApi(topology, live).asgi, **settings) as server,
         httpx.AsyncClient(base_url=server.url) as client,
         client.stream("GET", f"/api/threads/t1/events{query}", headers=headers) as reply,
     ):
@@ -79,9 +79,9 @@ async def test_viewer_api_events_replay(
 
 async def test_viewer_api_events_follow(topology: Topology, filled: Callable[[int], Awaitable[LiveAdapter]]) -> None:
     live = await filled(1)
-    settings = GranianSettings(port=free_port())
+    settings = GranianConfig(port=free_port())
     async with (
-        GranianAdapter(ViewerApi(topology, live).asgi, settings) as server,
+        GranianAdapter(ViewerApi(topology, live).asgi, **settings) as server,
         httpx.AsyncClient(base_url=server.url) as client,
         client.stream("GET", "/api/threads/t1/events") as reply,
     ):
@@ -99,9 +99,9 @@ async def test_viewer_api_events_foreign_payload(topology: Topology) -> None:
         frame(0, thread_id="t1", payload={"output": AIMessage("hola"), "at": datetime(2026, 11, 3, tzinfo=UTC)})
     )
     await live.send(frame(1, thread_id="t1"))
-    settings = GranianSettings(port=free_port())
+    settings = GranianConfig(port=free_port())
     async with (
-        GranianAdapter(ViewerApi(topology, live).asgi, settings) as server,
+        GranianAdapter(ViewerApi(topology, live).asgi, **settings) as server,
         httpx.AsyncClient(base_url=server.url) as client,
         client.stream("GET", "/api/threads/t1/events") as reply,
     ):

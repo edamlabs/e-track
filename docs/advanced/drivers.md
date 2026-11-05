@@ -7,13 +7,12 @@ differs. Install `e-track[http]`.
 ## As it is
 
 ```python
+from pydantic import SecretStr
+
 from etrack.infra.config.auth import BearerAuth
-from etrack.infra.config.base import Secret
-from etrack.infra.config.providers.drivers.sink.http import HttpSettings
 from etrack.providers.drivers.sink.http import HttpDriver
 
-settings = HttpSettings(endpoint="https://events.internal/v1/ingest", auth=BearerAuth(token=Secret("…")))
-async with HttpDriver(settings) as http:
+async with HttpDriver(endpoint="https://events.internal/v1/ingest", auth=BearerAuth(token=SecretStr("…"))) as http:
     bus.subscribe(http)
     ...
 ```
@@ -134,13 +133,13 @@ class RecallDriver(HttpDriver):
 ```
 
 ```python
-settings = HttpSettings(
+recall = RecallDriver(
     endpoint="http://127.0.0.1:8765/v1/recalls",
-    auth=BearerAuth(token=Secret("…")),
+    auth=BearerAuth(token=SecretStr("…")),
     batch=50,
     flush=timedelta(seconds=2),
 )
-async with RecallDriver(settings) as recall:
+async with recall:
     bus.subscribe(recall)
 ```
 

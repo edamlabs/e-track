@@ -6,18 +6,18 @@ and waits for it to drain. The app is anything ASGI — the viewer's, or a host'
 
 import asyncio
 import socket
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self, Unpack
 
 from granian.constants import Interfaces
 from granian.server.embed import Server
 
+from etrack.infra import defaults
 from etrack.infra.errors import ServerError
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
 if TYPE_CHECKING:
-    from etrack.infra.config.providers.adapters.server.granian import GranianSettings
+    from etrack.infra.config.providers import GranianConfig
     from etrack.ports.server import Asgi
 
 PAUSE: Final[float] = 0.02
@@ -28,19 +28,15 @@ class GranianAdapter:
 
     spec: ClassVar[ProviderSpec] = ProviderSpec("granian", Locality.EMBEDDED, Workload.IO_BOUND, Isolation.LOOP)
 
-    __slots__ = ("_app", "_server", "_settings", "_task")
+    __slots__ = ("_app", "_conf", "_server", "_task")
 
-    def __init__(self, app: Asgi, settings: GranianSettings | None = None) -> None:
+    def __init__(self, app: Asgi, **given: Unpack[GranianConfig]) -> None:
         self._app = app
-        self._settings = settings
+        self._conf = defaults.granian(**given)
         self._server: Server | None = None
         self._task: asyncio.Task[None] | None = None
 
     ##### PRIVATE #####
-
-    @property
-    def _common_settings(self) -> GranianSettings:
-        return self._settings or st.providers.adapters.server.granian
 
     @staticmethod
     def _enter_free(host: str, port: int) -> None:
@@ -54,14 +50,14 @@ class GranianAdapter:
                 raise ServerError(msg) from taken
 
     async def _enter_answering(self, task: asyncio.Task[None]) -> None:
-        config = self._common_settings
+        config = self._conf
         ### granian's startup hooks fire before the socket listens: a connection accepted is the only proof.
         try:
-            async with asyncio.timeout(config.boot.total_seconds()):
-                while not await self._enter_probe(task, config.host, config.port):  # noqa: ASYNC110 — a socket signals nothing
+            async with asyncio.timeout(config["boot"].total_seconds()):
+                while not await self._enter_probe(task, config["host"], config["port"]):  # noqa: ASYNC110 — a socket signals nothing
                     await asyncio.sleep(PAUSE)
         except TimeoutError as late:
-            msg = f"granian: {self.url} did not answer within {config.boot}"
+            msg = f"granian: {self.url} did not answer within {config['boot']}"
             raise ServerError(msg) from late
 
     @staticmethod
@@ -84,10 +80,10 @@ class GranianAdapter:
     ##### PUBLIC #####
 
     async def __aenter__(self) -> Self:
-        config = self._common_settings
-        self._enter_free(config.host, config.port)
+        config = self._conf
+        self._enter_free(config["host"], config["port"])
         self._server = Server(
-            self._app, address=config.host, port=config.port, interface=Interfaces.ASGI, log_enabled=False
+            self._app, address=config["host"], port=config["port"], interface=Interfaces.ASGI, log_enabled=False
         )
         self._task = asyncio.create_task(self._server.serve())
         try:
@@ -116,5 +112,5 @@ class GranianAdapter:
     @property
     def url(self) -> str:
         """Where the app answers: `http://host:port`."""
-        config = self._common_settings
-        return f"http://{config.host}:{config.port}"
+        config = self._conf
+        return f"http://{config['host']}:{config['port']}"

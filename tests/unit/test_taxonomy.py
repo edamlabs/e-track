@@ -4,7 +4,7 @@ Imports are read with `ast` (tach holds the layers too; this is the second, read
 processors (layout aside), logic — never names a framework: each foreign library enters through the one module that
 owns it. Every class that names itself a driver or an adapter declares its spec and lifecycle, lives at
 `providers/<nature>/<capability>/<name>.py` where `<capability>` is a module of `ports/`, meets that port, agrees
-with its locality (`EMBEDDED` is an adapter) and carries a unique `<Name><Nature>` name. Config mirrors the tree."""
+with its locality (`EMBEDDED` is an adapter) and carries a unique `<Name><Nature>` name."""
 
 import importlib
 from collections import Counter
@@ -12,13 +12,10 @@ from typing import TYPE_CHECKING, get_protocol_members
 
 import pytest
 
-from etrack.infra.config.base import BaseSettings
 from etrack.ports.provider import Locality, Provider, ProviderSpec
 from support.tree import (
     BRANDS,
     CASES,
-    CONFIG,
-    CONFIGS,
     EVERY,
     FORBIDDEN,
     FRAMEWORKS,
@@ -98,17 +95,3 @@ async def test_taxonomy_provider_name_is_brand_then_nature(folder: str, cls: typ
     ### the capability enters the name only when the brand repeats across capabilities: TeiEmbedDriver, TeiRerankDriver.
     qualifier = capability.title() if BRANDS[brand] > 1 else ""
     assert cls.__name__ == f"{brand.title()}{qualifier}{nature}"
-
-
-##### CONFIG MIRRORS THE TREE #####
-@pytest.mark.parametrize("path", CONFIGS, ids=[str(path.relative_to(CONFIG)) for path in CONFIGS])
-async def test_taxonomy_config_configures_a_module(path: Path) -> None:
-    configured = PACKAGE / path.relative_to(CONFIG)
-    assert configured.exists(), f"{path.relative_to(CONFIG)} configures no module"
-    module = importlib.import_module(dotted(path))
-    scopes = [
-        cls
-        for cls in vars(module).values()
-        if isinstance(cls, type) and issubclass(cls, BaseSettings) and cls is not BaseSettings
-    ]
-    assert len(scopes) == 1

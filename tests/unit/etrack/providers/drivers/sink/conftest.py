@@ -7,14 +7,14 @@ import pytest
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from etrack.infra.config.providers.drivers.sink.http import HttpSettings
+from etrack.infra.config.providers import HttpConfig
 from etrack.models.event import EventKind, EventPhase, ModelRef, Usage
 from unit.etrack.conftest import RUN, frame
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    type Configure = Callable[..., HttpSettings]
+    type Configure = Callable[..., HttpConfig]
 
     from etrack.providers.drivers.sink.otlp import OtlpDriver
 
@@ -77,9 +77,12 @@ def run_tree(root: str, child: str) -> Callable[[OtlpDriver], Awaitable[None]]:
 
 @pytest.fixture
 def settings() -> Configure:
-    """`settings(url, **fields)`: an HTTP sink's settings — no timer in the way, a backoff of a millisecond."""
+    """`settings(url, **fields)`: an HTTP sink's keyword arguments — no timer in the way, a backoff of a millisecond,
+    the fields given on top."""
 
-    def build(url: str, **fields: Any) -> HttpSettings:
-        return HttpSettings(endpoint=url, flush=timedelta(seconds=30), backoff=timedelta(milliseconds=1), **fields)
+    def build(url: str, **fields: Any) -> HttpConfig:
+        return HttpConfig(
+            **{"endpoint": url, "flush": timedelta(seconds=30), "backoff": timedelta(milliseconds=1)} | fields
+        )
 
     return build
