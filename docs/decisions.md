@@ -148,3 +148,21 @@ into both; coverage 100 %.
 googleinterns/cloud-operations-api-mock as a local fake — archived since 2022, Trace v2 only; a queue and worker inside
 the HTTP driver — the bus already isolates every sink; Pushgateway — Prometheus scrapes, and pushed traces go over
 OTLP. Not measured: a Rust-backed HTTP client (wreq, rnet) against httpx for this driver — open for a benchmark.
+
+### 2026-11-05 · Settings: one cluster of UPPERCASE fields; `infra/defaults` is the library's root
+
+**Decision.** The house settings law (e-nous `proj-py-layout/references/settings.md`, library case): one
+`ProviderSettings` cluster in `infra/config/providers.py` whose fields are the env variables themselves
+(`ETRACK_OTLP_TARGETS`, no `env_prefix`), strictly typed; `Settings` inherits it and is read once, at import. Every
+provider takes keyword arguments — `OtlpDriver(targets=…)`, typed by a `TypedDict` (`OtlpConfig`…) and validated by its
+`TypeAdapter` — and never reads `st`. `infra/defaults` is the composition root a library lacks: the only module that
+reads `st`, it fills what a provider is not handed, so `OtlpDriver()` still reads `ETRACK_OTLP_*`.
+
+**Evidence.** Every env name of 0.5.0 held: the 27 in `tests/resources/settings/env.json`, taken from main before the
+change. Gates in `tests/unit/etrack/infra/test_settings.py`: uppercase, no field in two clusters, the snapshot, root-only
+reads (mutation-checked: an `infra.settings` import in `LiveAdapter` fails it), types only below the root.
+
+**Rejected.** The literal reading — the host's code as the only root, every provider handed every value: it breaks the
+zero-config `OtlpDriver()` the README teaches. Keeping `OtlpSettings(...)` as the override object: a settings class
+below the root, the thing the law forbids. The lazy composer and its `LazyProxy`, and `ops/file.FileFinder` that fed it.
+

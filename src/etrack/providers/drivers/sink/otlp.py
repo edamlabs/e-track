@@ -12,7 +12,7 @@ The driver owns a private `TracerProvider` and `LoggerProvider`, never the proce
 import asyncio
 from datetime import datetime
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Self, Unpack
 
 import eserde
 import msgspec
@@ -28,10 +28,10 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcess
 from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
 from opentelemetry.trace import NonRecordingSpan, SpanContext, Status, StatusCode, TraceFlags
 
+from etrack.infra import defaults
 from etrack.infra.auth import AuthSigner
 from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
-from etrack.infra.settings import settings as st
 from etrack.models.event import EventKind, EventPhase, EventView, Failure, ModelRef, Part, Usage
 from etrack.ops.w3c import w3c_span, w3c_trace
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
     from opentelemetry.trace import Span, Tracer
 
-    from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings
+    from etrack.infra.config.providers import OtlpConfig
 
 type Primitive = str | bool | int | float
 
@@ -161,13 +161,13 @@ class OtlpDriver:
     phases: ClassVar[frozenset[EventPhase]] = PHASES
 
     __slots__ = (
+        "_conf",
         "_contexts",
         "_ids",
         "_log_exporters",
         "_logger",
         "_logs",
         "_open",
-        "_settings",
         "_signers",
         "_span_exporters",
         "_tracer",
@@ -176,11 +176,13 @@ class OtlpDriver:
 
     def __init__(
         self,
-        settings: OtlpSettings | None = None,
         span_exporters: Sequence[SpanExporter] = (),
         log_exporters: Sequence[LogRecordExporter] = (),
+        **given: Unpack[OtlpConfig],
     ) -> None:
-        self._settings = settings
+        """Keyword arguments as `OtlpConfig` names them; what is not given, ETRACK_OTLP_* fills (`infra/defaults`).
+        Exporters handed in receive everything beside the targets' (tests, a host's own)."""
+        self._conf = defaults.otlp(**given)
         self._signers: dict[str, AuthSigner] = {}
         self._span_exporters = tuple(span_exporters)
         self._log_exporters = tuple(log_exporters)
@@ -210,19 +212,15 @@ class OtlpDriver:
             case _:
                 return eserde.dumps(value, default=str).decode()
 
-    @property
-    def _common_settings(self) -> OtlpSettings:
-        return self._settings or st.providers.drivers.sink.otlp
-
     def _common_headers(self, name: str) -> dict[str, str]:
-        target = self._common_settings.targets[name]
+        target = self._conf["targets"][name]
         fixed = {key: secret.get_secret_value() for key, secret in target.headers.items()}
         return {**fixed, **self._signers[name].static()}
 
     def _enter_traces(self, resource: Resource) -> TracerProvider:
-        config = self._common_settings
+        config = self._conf
         provider = TracerProvider(resource=resource, id_generator=self._ids)
-        timeout, flush = config.timeout.total_seconds(), config.flush.total_seconds() * MS
+        timeout, flush = config["timeout"].total_seconds(), config["flush"].total_seconds() * MS
         remote = [
             BatchSpanProcessor(
                 OTLPSpanExporter(
@@ -233,16 +231,16 @@ class OtlpDriver:
                 ),
                 schedule_delay_millis=flush,
             )
-            for name, target in config.targets.items()
+            for name, target in config["targets"].items()
         ]
         local = [SimpleSpanProcessor(exporter) for exporter in self._span_exporters]
         _ = [provider.add_span_processor(processor) for processor in (*remote, *local)]
         return provider
 
     def _enter_logs(self, resource: Resource) -> LoggerProvider:
-        config = self._common_settings
+        config = self._conf
         provider = LoggerProvider(resource=resource)
-        timeout, flush = config.timeout.total_seconds(), config.flush.total_seconds() * MS
+        timeout, flush = config["timeout"].total_seconds(), config["flush"].total_seconds() * MS
         remote = [
             BatchLogRecordProcessor(
                 OTLPLogExporter(
@@ -253,7 +251,7 @@ class OtlpDriver:
                 ),
                 schedule_delay_millis=flush,
             )
-            for name, target in config.targets.items()
+            for name, target in config["targets"].items()
         ]
         local = [SimpleLogRecordProcessor(exporter) for exporter in self._log_exporters]
         _ = [provider.add_log_record_processor(processor) for processor in (*remote, *local)]
@@ -426,15 +424,17 @@ class OtlpDriver:
     ##### PUBLIC #####
 
     async def __aenter__(self) -> Self:
-        config = self._common_settings
+        config = self._conf
         ### credentials resolve before the exporters exist: a Google target reads its ADC off the loop, once.
-        self._signers = {name: await AuthSigner(target.auth).ready() for name, target in config.targets.items()}
-        resource = Resource.create({**config.attributes, "service.name": config.service})
+        self._signers = {name: await AuthSigner(target.auth).ready() for name, target in config["targets"].items()}
+        resource = Resource.create({**config["attributes"], "service.name": config["service"]})
         self._traces = self._enter_traces(resource)
         self._tracer = self._traces.get_tracer("etrack")
-        self._logs = self._enter_logs(resource) if config.logs or self._log_exporters else None
+        self._logs = self._enter_logs(resource) if config["logs"] or self._log_exporters else None
         self._logger = self._logs.get_logger("etrack") if self._logs else None
-        logger.info("otlp opened", targets=sorted(config.targets), traces=config.traces, logs=self._logs is not None)
+        logger.info(
+            "otlp opened", targets=sorted(config["targets"]), traces=config["traces"], logs=self._logs is not None
+        )
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -451,7 +451,7 @@ class OtlpDriver:
 
     async def health(self) -> bool:
         """Open, and every batch flushed within the export timeout."""
-        timeout = int(self._common_settings.timeout.total_seconds() * MS)
+        timeout = int(self._conf["timeout"].total_seconds() * MS)
         match self._traces:
             case None:
                 return False
@@ -461,7 +461,7 @@ class OtlpDriver:
     async def send(self, view: EventView) -> None:
         """Open, close or stamp the frame's span; with logs on, the frame is also a log record on it."""
         frame = OtlpView.project(view)
-        traced = self._common_settings.traces
+        traced = self._conf["traces"]
         match (frame.phase, traced):
             case (_, False):
                 pass

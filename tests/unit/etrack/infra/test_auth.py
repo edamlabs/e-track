@@ -6,10 +6,10 @@ import google.auth
 import pytest
 from google.auth.exceptions import DefaultCredentialsError
 from google.auth.transport.requests import AuthorizedSession
+from pydantic import SecretStr
 
 from etrack.infra.auth import AuthSigner
 from etrack.infra.config.auth import BasicAuth, BearerAuth, GoogleAuth, HeadersAuth, NoAuth
-from etrack.infra.config.base import Secret
 from etrack.infra.errors import AuthError
 from support.credentials import FakeCredentials
 
@@ -18,9 +18,9 @@ from support.credentials import FakeCredentials
     ("auth", "expected"),
     [
         (NoAuth(), {}),
-        (HeadersAuth(headers={"x-api-key": Secret("k")}), {"x-api-key": "k"}),
-        (BearerAuth(token=Secret("t")), {"Authorization": "Bearer t"}),
-        (BasicAuth(username="u", password=Secret("p")), {"Authorization": "Basic dTpw"}),
+        (HeadersAuth(headers={"x-api-key": SecretStr("k")}), {"x-api-key": "k"}),
+        (BearerAuth(token=SecretStr("t")), {"Authorization": "Bearer t"}),
+        (BasicAuth(username="u", password=SecretStr("p")), {"Authorization": "Basic dTpw"}),
     ],
     ids=["none", "headers", "bearer", "basic"],
 )

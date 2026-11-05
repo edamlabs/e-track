@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
+from etrack.infra.config.providers import OtlpConfig, OtlpTarget
 from etrack.models.event import EventKind
 
 if TYPE_CHECKING:
@@ -21,10 +21,10 @@ pytestmark = pytest.mark.integration
 
 
 async def test_otlp_collector_receives_the_tree_and_its_logs(
-    sandbox: Sandbox, deep_run: Callable[[OtlpSettings], Awaitable[Run]]
+    sandbox: Sandbox, deep_run: Callable[[OtlpConfig], Awaitable[Run]]
 ) -> None:
     run = await deep_run(
-        OtlpSettings(targets={"collector": OtlpTarget(endpoint=sandbox.collector)}, logs=True, service="etrack-e2e")
+        OtlpConfig(targets={"collector": OtlpTarget(endpoint=sandbox.collector)}, logs=True, service="etrack-e2e")
     )
     spans = await sandbox.received("traces", run.trace, least=run.spans)
     assert len(spans) == run.spans
@@ -46,10 +46,10 @@ async def test_otlp_collector_receives_the_tree_and_its_logs(
 
 
 async def test_otlp_phoenix_reads_the_openinference_kinds(
-    sandbox: Sandbox, deep_run: Callable[[OtlpSettings], Awaitable[Run]], project: str
+    sandbox: Sandbox, deep_run: Callable[[OtlpConfig], Awaitable[Run]], project: str
 ) -> None:
     run = await deep_run(
-        OtlpSettings(
+        OtlpConfig(
             targets={"phoenix": OtlpTarget(endpoint=sandbox.phoenix)},
             service="etrack-e2e",
             attributes={"openinference.project.name": project},

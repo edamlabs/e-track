@@ -1,15 +1,13 @@
 """infra/config/auth: how a driver authenticates — configuration only; any driver's target carries one.
 
-Picked by `type`, so it reads from the environment as JSON: `{"type": "bearer", "token": "…"}`. Secrets are `Secret`,
+Picked by `type`, so it reads from the environment as JSON: `{"type": "bearer", "token": "…"}`. Secrets are `SecretStr`,
 masked everywhere but at the wire. `google` reads Application Default Credentials (a service account file, the
 gcloud login, or the metadata server on Google Cloud) and keeps a fresh OAuth token; `quota_project` is billed for
 the calls (`x-goog-user-project`), required by the Telemetry API."""
 
 from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from etrack.infra.config.base import Secret
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 CLOUD_PLATFORM: Final[str] = "https://www.googleapis.com/auth/cloud-platform"
 
@@ -28,7 +26,7 @@ class HeadersAuth(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     type: Literal["headers"] = "headers"
-    headers: dict[str, Secret] = Field(default_factory=dict)
+    headers: dict[str, SecretStr] = Field(default_factory=dict)
 
 
 class BearerAuth(BaseModel):
@@ -37,7 +35,7 @@ class BearerAuth(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     type: Literal["bearer"] = "bearer"
-    token: Secret
+    token: SecretStr
 
 
 class BasicAuth(BaseModel):
@@ -47,7 +45,7 @@ class BasicAuth(BaseModel):
 
     type: Literal["basic"] = "basic"
     username: str
-    password: Secret
+    password: SecretStr
 
 
 class GoogleAuth(BaseModel):

@@ -9,10 +9,10 @@ import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from opentelemetry.trace import StatusCode
+from pydantic import SecretStr
 
 from etrack.infra.config.auth import BearerAuth, GoogleAuth
-from etrack.infra.config.base import Secret
-from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
+from etrack.infra.config.providers import OtlpConfig, OtlpTarget
 from etrack.infra.errors import SinkError
 from etrack.models.event import EventKind, EventPhase, Failure, Part, Usage
 from etrack.ports.sink import SinkPort
@@ -130,7 +130,7 @@ async def test_otlp_instant_under_closed_parent(spans: InMemorySpanExporter, roo
 
 
 async def test_otlp_traces_off(spans: InMemorySpanExporter, run_tree: Callable[[OtlpDriver], Awaitable[None]]) -> None:
-    async with OtlpDriver(OtlpSettings(traces=False), span_exporters=[spans]) as driver:
+    async with OtlpDriver(**OtlpConfig(traces=False), span_exporters=[spans]) as driver:
         await run_tree(driver)
     assert spans.get_finished_spans() == ()
 
@@ -180,9 +180,9 @@ async def test_otlp_remote_fake_collector(
     httpserver: HTTPServer, run_tree: Callable[[OtlpDriver], Awaitable[None]]
 ) -> None:
     collector = fake_collector(httpserver)
-    target = OtlpTarget(endpoint=f"{collector.endpoint}/", headers={"Authorization": Secret("Basic eA==")})
-    settings = OtlpSettings(targets={"fake": target}, logs=True, flush=timedelta(milliseconds=10))
-    async with OtlpDriver(settings) as driver:
+    target = OtlpTarget(endpoint=f"{collector.endpoint}/", headers={"Authorization": SecretStr("Basic eA==")})
+    settings = OtlpConfig(targets={"fake": target}, logs=True, flush=timedelta(milliseconds=10))
+    async with OtlpDriver(**settings) as driver:
         await run_tree(driver)
         assert await driver.flush()
     received = {span.name: span for span in collector.spans()}
@@ -233,7 +233,7 @@ async def test_otlp_google_target_signed_on_the_wire(
     monkeypatch.setattr(google.auth, "default", lambda **kwargs: (FakeCredentials(kwargs["quota_project_id"]), "p"))
     collector = fake_collector(httpserver)
     target = OtlpTarget(endpoint=collector.endpoint, auth=GoogleAuth(quota_project="billing"))
-    async with OtlpDriver(OtlpSettings(targets={"cloudtrace": target}, flush=timedelta(milliseconds=10))) as driver:
+    async with OtlpDriver(**OtlpConfig(targets={"cloudtrace": target}, flush=timedelta(milliseconds=10))) as driver:
         await run_tree(driver)
         assert await driver.flush()
     assert {(headers["Authorization"], headers["X-Goog-User-Project"]) for headers in collector.headers} == {
@@ -246,9 +246,9 @@ async def test_otlp_bearer_target_merged(
 ) -> None:
     collector = fake_collector(httpserver)
     target = OtlpTarget(
-        endpoint=collector.endpoint, headers={"x-tenant": Secret("a")}, auth=BearerAuth(token=Secret("t"))
+        endpoint=collector.endpoint, headers={"x-tenant": SecretStr("a")}, auth=BearerAuth(token=SecretStr("t"))
     )
-    async with OtlpDriver(OtlpSettings(targets={"tempo": target}, flush=timedelta(milliseconds=10))) as driver:
+    async with OtlpDriver(**OtlpConfig(targets={"tempo": target}, flush=timedelta(milliseconds=10))) as driver:
         await run_tree(driver)
         assert await driver.flush()
     assert all((h["Authorization"], h["X-Tenant"]) == ("Bearer t", "a") for h in collector.headers)

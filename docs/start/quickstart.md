@@ -119,16 +119,15 @@ docker run -d --rm -p 127.0.0.1:6006:6006 -e PHOENIX_ENABLE_AUTH=false \
 ```
 
 ```python
-from etrack.infra.config.providers.drivers.sink.otlp import OtlpSettings, OtlpTarget
+from etrack.infra.config.providers import OtlpTarget
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 
 phoenix = OtlpTarget(endpoint="http://localhost:6006")
-settings = OtlpSettings(targets={"phoenix": phoenix})
 
 
 async def main() -> None:
     # closing it flushes the last spans
-    async with OtlpDriver(settings) as otlp:
+    async with OtlpDriver(targets={"phoenix": phoenix}) as otlp:
         bus = AnyioAdapter()
         bus.subscribe(otlp)
         async with bus:

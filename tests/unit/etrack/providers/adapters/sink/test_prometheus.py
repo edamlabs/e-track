@@ -2,7 +2,7 @@
 
 import httpx
 
-from etrack.infra.config.providers.adapters.sink.prometheus import PrometheusSettings
+from etrack.infra.config.providers import PrometheusConfig
 from etrack.models.event import EventKind, EventPhase, Failure, ModelRef, Usage
 from etrack.ports.sink import SinkPort
 from etrack.providers.adapters.sink.prometheus import PrometheusAdapter, PrometheusView
@@ -14,7 +14,7 @@ async def test_prometheus_meets_port() -> None:
 
 
 async def test_prometheus_counts_times_and_prices() -> None:
-    async with PrometheusAdapter(PrometheusSettings(namespace="t")) as metrics:
+    async with PrometheusAdapter(**PrometheusConfig(namespace="t")) as metrics:
         assert await metrics.health()
         sent = [
             frame(0, EventPhase.START, kind=EventKind.RUN, name="agent"),

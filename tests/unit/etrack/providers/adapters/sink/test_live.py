@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import anyio
 import pytest
 
-from etrack.infra.config.providers.adapters.sink.live import LiveSettings
+from etrack.infra.config.providers import LiveConfig
 from etrack.ports.sink import LiveFrame, SinkPort, WatchPort
 from etrack.providers.adapters.sink.live import LiveAdapter
 from unit.etrack.conftest import frame
@@ -53,13 +53,13 @@ async def test_live_replay_then_follow(take: Take) -> None:
 
 
 async def test_live_buffer_bounded(take: Take) -> None:
-    live = LiveAdapter(LiveSettings(buffer=2))
+    live = LiveAdapter(**LiveConfig(buffer=2))
     _ = [await live.send(frame(seq)) for seq in range(5)]
     assert [each.offset for each in await take(live, "t1", -1, 2)] == [3, 4]
 
 
 async def test_live_lagging_watcher_cut() -> None:
-    live = LiveAdapter(LiveSettings(backlog=1))
+    live = LiveAdapter(**LiveConfig(backlog=1))
     watcher = live.watch("t1")
     pending = anext(watcher)
     await live.send(frame(0))
@@ -71,7 +71,7 @@ async def test_live_lagging_watcher_cut() -> None:
 
 
 async def test_live_evicts_oldest_thread() -> None:
-    live = LiveAdapter(LiveSettings(threads=2))
+    live = LiveAdapter(**LiveConfig(threads=2))
     _ = [await live.send(frame(seq, thread_id=thread)) for seq, thread in enumerate(["a", "b", "c"])]
     assert (live.offset("a"), live.offset("b"), live.offset("c")) == (0, 1, 1)
 

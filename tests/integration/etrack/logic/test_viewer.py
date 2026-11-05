@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import pytest
 
-from etrack.infra.config.providers.adapters.server.granian import GranianSettings
+from etrack.infra.config.providers import GranianConfig
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.logic.viewer import Viewer
@@ -40,9 +40,9 @@ async def test_viewer_deep_agent_end_to_end(
                 await deep_agent().ainvoke({"messages": [("user", "¿qué es una póliza?")]}, first.config)
             kept = live.offset("e2e")
             viewer = Viewer(watch=live, topology=LanggraphTopologyAdapter().read(deep_agent()), labels=viewer_labels)
-            settings = GranianSettings(port=free_port())
+            settings = GranianConfig(port=free_port())
             async with (
-                GranianAdapter(viewer.app, settings) as server,
+                GranianAdapter(viewer.app, **settings) as server,
                 httpx.AsyncClient(base_url=server.url, timeout=wait) as client,
             ):
                 topology = (await client.get("/api/topology")).json()

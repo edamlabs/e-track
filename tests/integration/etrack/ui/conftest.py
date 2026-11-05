@@ -12,7 +12,7 @@ from deepagents import create_deep_agent
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 
-from etrack.infra.config.providers.adapters.server.granian import GranianSettings
+from etrack.infra.config.providers import GranianConfig
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.logic.viewer import Viewer
@@ -99,7 +99,7 @@ async def served(
             )
             pages: list[Page] = []
             app, prefix = HOSTS[host](viewer.app)
-            async with GranianAdapter(app, GranianSettings(port=free_port())) as server:
+            async with GranianAdapter(app, **GranianConfig(port=free_port())) as server:
 
                 async def run(thread: str = THREAD) -> None:
                     with tracker.track(thread, {}) as tracked:
