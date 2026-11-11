@@ -4,6 +4,8 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-11
+
 ### Added
 
 - **The run in progress, reached from inside it** (TODO_recall 3): `etrack.logic.handle.run` — `run.span(...)` around
