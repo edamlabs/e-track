@@ -4,6 +4,15 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- **The LangGraph source draws what ran** (TODO_recall 2): a node's `visit` is counted per mount — one subgraph
+  mounted twice counts its nodes apart (breaking: `visit` values change for reused subgraphs); a subgraph compiled
+  under the name of its own inner node no longer hides that node (the node is the first chain of its task, read from
+  `langgraph_checkpoint_ns`); an instant frame with no coordinates (`dispatch_custom_event`) stands where its parent
+  runs (`node`, `ns`, `step`); a node's END carries where it sent the run — `goto`, the destinations of the `Command`s
+  it returned, beside the keys of their `update`.
+
 ### Changed
 
 - **Settings follow the house law** (`docs/decisions.md`, 2026-11-05). One `ProviderSettings` cluster of UPPERCASE

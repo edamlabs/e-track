@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Self
 from langchain_core.callbacks import BaseCallbackHandler, BaseCallbackManager
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.types import Command, Send
 
 from etrack.infra.errors import SourceError
 from etrack.infra.logger import logger
@@ -67,8 +68,9 @@ class LanggraphHandler(BaseCallbackHandler):
         self._fold = fold
         self._mcp = mcp
         self._subagents = subagents
-        self._names: dict[str, str] = {}
         self._interrupted: set[int] = set()
+        ### the tasks a node span already stands for: a compiled subgraph mounted as a node runs in its node's task.
+        self._tasks: set[str] = set()
 
     ##### PRIVATE #####
 
@@ -108,7 +110,6 @@ class LanggraphHandler(BaseCallbackHandler):
         **fields: Any,
     ) -> None:
         node, ns, step = self._common_meta(metadata)
-        self._names[self._common_hex(run)] = name
         self._fold.open(
             Edge(
                 id=self._common_hex(run),
@@ -152,6 +153,32 @@ class LanggraphHandler(BaseCallbackHandler):
                     attributes={"etrack.interrupt.ids": ids},
                 )
                 self._fold.instant(edge)
+
+    @staticmethod
+    def _chain_goto(goto: Any) -> list[str]:
+        match goto:
+            case Send() as send:
+                return [send.node]
+            case str() as node:
+                return [node]
+            case targets:
+                return [node for target in targets for node in LanggraphHandler._chain_goto(target)]
+
+    @staticmethod
+    def _chain_route(outputs: Any) -> dict[str, Any]:
+        """What a chain left: the keys it wrote, and where it sent the run when it returned `Command`s."""
+        match outputs:
+            case dict():
+                return {"keys": sorted(outputs)}
+            case Command() as command:
+                return LanggraphHandler._chain_route([command])
+            case [Command(), *_] as commands:
+                updates = [command.update for command in commands]
+                keys = {key for update in updates for key in (dict(update) if update else {})}
+                goto = [node for command in commands for node in LanggraphHandler._chain_goto(command.goto)]
+                return {"keys": sorted(keys), "goto": goto}
+            case _:
+                return {"keys": []}
 
     @staticmethod
     def _llm_blocks(message: Any) -> list[dict[str, Any]]:
@@ -227,9 +254,12 @@ class LanggraphHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         name = str(kwargs.get("name") or (serialized or {}).get("name", ""))
-        ### a compiled subgraph mounted as a node opens a second chain under the node, named like it: one span, not two.
-        nested = self._names.get(self._common_hex(parent_run_id)) == name
-        is_node = (metadata or {}).get("langgraph_node") == name and not nested
+        meta = metadata or {}
+        ### a compiled subgraph mounted as a node opens a second chain in the node's own task, often named like it: the
+        ### first chain of a task named as its node is the node; any other is plumbing — one span, not two.
+        task = str(meta.get("langgraph_checkpoint_ns") or run_id.hex)
+        is_node = meta.get("langgraph_node") == name and task not in self._tasks
+        _ = is_node and self._tasks.add(task)
         match (parent_run_id, is_node):
             case (None, _):
                 attributes = self._common_lift(metadata)
@@ -242,8 +272,7 @@ class LanggraphHandler(BaseCallbackHandler):
                 self._common_open(run_id, parent_run_id, None, name, metadata)
 
     def on_chain_end(self, outputs: dict[str, Any] | Any, *, run_id: UUID, **kwargs: Any) -> None:
-        keys = sorted(outputs) if isinstance(outputs, dict) else []
-        self._fold.close(self._common_hex(run_id), {"keys": keys})
+        self._fold.close(self._common_hex(run_id), self._chain_route(outputs))
 
     def on_chain_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         self._common_failure(run_id, error)

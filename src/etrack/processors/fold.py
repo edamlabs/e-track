@@ -14,6 +14,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Final
 
+import msgspec
+
 from etrack.models.event import EventKind, EventPhase, Failure, Part, RunEvent, RunScope, Usage
 from etrack.ports.source import Edge
 
@@ -47,7 +49,7 @@ class FoldProcessor:
         ### every id seen → the span its children hang from: itself when kept, its kept ancestor when folded.
         self._spans: dict[str, str] = {}
         self._open: dict[str, OpenSpan] = {}
-        self._visits: Counter[str] = Counter()
+        self._visits: Counter[tuple[str, str]] = Counter()
 
     ##### PRIVATE #####
 
@@ -60,10 +62,12 @@ class FoldProcessor:
         return self._spans.get(parent, self._root if parent else "")
 
     def _common_visit(self, edge: Edge) -> int | None:
+        ### a node is counted per mount: the same subgraph mounted twice counts its nodes apart (`ns` without task ids).
         match edge.kind:
             case EventKind.NODE:
-                self._visits[edge.name] += 1
-                return self._visits[edge.name]
+                mount = "|".join(segment.partition(":")[0] for segment in edge.ns.split("|"))
+                self._visits[mount, edge.name] += 1
+                return self._visits[mount, edge.name]
             case _:
                 return None
 
@@ -149,6 +153,12 @@ class FoldProcessor:
     def instant(self, edge: Edge) -> None:
         """A frame born closed — an interrupt, a state, a score, a custom fact — under its visible parent."""
         parent = self._common_visible(edge.parent) if edge.parent else self._root
+        ### a frame with no coordinates of its own stands where its parent runs.
+        match (edge.node, self._open.get(parent)):
+            case ("", OpenSpan(edge=around)):
+                edge = msgspec.structs.replace(edge, node=around.node, ns=around.ns, step=around.step)
+            case _:
+                pass
         span = OpenSpan(edge=edge, parent=parent, visit=None, began=time.perf_counter())
         self._common_frame(span, EventPhase.INSTANT, edge.payload)
 
