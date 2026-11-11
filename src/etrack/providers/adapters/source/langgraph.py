@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Self
 
 from langchain_core.callbacks import BaseCallbackHandler, BaseCallbackManager
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import var_child_runnable_config
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.types import Command, Send
 
@@ -438,6 +439,14 @@ class LanggraphSourceAdapter:
                 msg = f"langgraph: callbacks of a RunnableConfig are a list or a manager, not {type(other).__name__}"
                 raise SourceError(msg)
 
+    @staticmethod
+    def _locate_parent(callbacks: Any) -> str:
+        match callbacks:
+            case BaseCallbackManager(parent_run_id=uuid.UUID() as parent):
+                return parent.hex
+            case _:
+                return ""
+
     ############################################################
 
     ##### PUBLIC #####
@@ -452,6 +461,11 @@ class LanggraphSourceAdapter:
     async def health(self) -> bool:
         """Always ready: the source holds no resource."""
         return True
+
+    def locate(self) -> str:
+        """The runnable running where the caller stands — the node, the tool — read from LangChain's own context."""
+        config = var_child_runnable_config.get() or {}
+        return self._locate_parent(config.get("callbacks"))
 
     def bind(self, fold: FoldPort, scope: RunScope, config: RunnableConfig) -> RunnableConfig:
         """The host's config with the run's handler appended (inherited ones kept) and the run's id as the root's."""

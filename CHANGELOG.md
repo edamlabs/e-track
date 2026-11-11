@@ -4,6 +4,14 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- **The run in progress, reached from inside it** (TODO_recall 3): `etrack.logic.handle.run` — `run.span(...)` around
+  any block a node, a tool or a middleware calls, with no handle passed down: `Tracker.track` binds the run's fold in a
+  context variable, LangGraph carries it into its tasks, and the span hangs from what is running where it opens (the
+  source locates it: `LocatePort`, met by the LangGraph source through LangChain's own context). Outside a run every
+  call is a no-op; two concurrent runs never cross.
+
 ### Fixed
 
 - **The LangGraph source draws what ran** (TODO_recall 2): a node's `visit` is counted per mount — one subgraph
