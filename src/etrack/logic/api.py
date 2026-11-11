@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from etrack.logic.handle import RUNNING, Running
-from etrack.models.event import Redact, RunScope
+from etrack.models.event import Pricer, Redact, RunScope
 from etrack.ports.source import LocatePort
 from etrack.processors.fold import FoldProcessor
 
@@ -36,17 +36,24 @@ class Tracked[C]:
 
 class Tracker[C]:
     """Runs of one framework, tracked onto one channel; `redact` is the project's mask over every payload; `propagate`
-    puts the run's root attributes (the host's `app.*`) on every frame of the run."""
+    puts the run's root attributes (the host's `app.*`) on every frame of the run; `pricer` prices each model call."""
 
-    __slots__ = ("_channel", "_propagate", "_redact", "_source")
+    __slots__ = ("_channel", "_pricer", "_propagate", "_redact", "_source")
 
     def __init__(
-        self, channel: EventChannel, source: SourcePort[C], redact: Redact | None = None, *, propagate: bool = False
+        self,
+        channel: EventChannel,
+        source: SourcePort[C],
+        redact: Redact | None = None,
+        *,
+        propagate: bool = False,
+        pricer: Pricer | None = None,
     ) -> None:
         self._channel = channel
         self._source = source
         self._redact = redact
         self._propagate = propagate
+        self._pricer = pricer
 
     ##### PRIVATE #####
 
@@ -63,7 +70,7 @@ class Tracker[C]:
     def track(self, thread: str, config: C, run_id: str | None = None) -> Generator[Tracked[C]]:
         """One run on `thread`: the scope, the bound config and the fold, with the run's ids bound for the block."""
         scope = RunScope(run_id=run_id or uuid.uuid7().hex, thread_id=thread)
-        fold = FoldProcessor(scope, self._channel.emit, self._redact, propagate=self._propagate)
+        fold = FoldProcessor(scope, self._channel.emit, self._redact, propagate=self._propagate, pricer=self._pricer)
         source = self._source
         locate = source.locate if isinstance(source, LocatePort) else self._track_nowhere
         token = RUNNING.set(Running(fold=fold, locate=locate))

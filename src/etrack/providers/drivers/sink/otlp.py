@@ -294,10 +294,28 @@ class OtlpDriver:
                     "gen_ai.usage.reasoning.output_tokens": usage.reasoning_tokens,
                 }
 
+    @staticmethod
+    def _send_totals(view: OtlpView) -> dict[str, Primitive]:
+        """What the model calls under a NODE or a RUN spent, under etrack's own keys: a backend that sums its generations
+        never counts them twice."""
+        match view.usage:
+            case Usage() as usage if view.kind is not EventKind.LLM:
+                totals = {
+                    "etrack.usage.input_tokens": usage.input_tokens,
+                    "etrack.usage.output_tokens": usage.output_tokens,
+                    "etrack.usage.total_tokens": usage.total_tokens,
+                    "etrack.usage.cost_usd": usage.cost_usd,
+                }
+                return {key: value for key, value in totals.items() if value is not None}
+            case _:
+                return {}
+
     @classmethod
     def _send_attributes(cls, view: OtlpView) -> dict[str, Primitive]:
         """The span's attributes in the three dialects, from what the frame carries."""
-        model, usage = view.model or ModelRef(), view.usage
+        model = view.model or ModelRef()
+        ### the dialects' usage keys are a model call's: GenAI, OpenInference and Langfuse sum them over the trace.
+        usage = view.usage if view.kind is EventKind.LLM else None
         named = {
             "etrack.run_id": view.run_id,
             "etrack.thread_id": view.thread_id,
@@ -332,6 +350,8 @@ class OtlpDriver:
             **{key: value for key, value in named.items() if value},
             **{key: value for key, value in measured.items() if value is not None},
             **cls._send_usage(usage),
+            **cls._send_totals(view),
+            **({"etrack.cost_usd": usage.cost_usd} if usage and usage.cost_usd is not None else {}),
             **params,
             **extra,
         }

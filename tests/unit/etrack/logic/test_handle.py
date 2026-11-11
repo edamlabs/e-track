@@ -18,7 +18,7 @@ from etrack.models.fact import Fact
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
 from support.events import by
 from support.graph import state_graph
-from support.model import script
+from support.model import script, think
 from unit.etrack.conftest import Collector
 
 
@@ -209,3 +209,28 @@ async def test_handle_fact_refused(value: Fact, match: str) -> None:
     ### refused at the call, tracked or not.
     with pytest.raises(FactError, match=match):
         run.fact(value)
+
+
+##### COST #####
+async def test_handle_cost_per_node_and_run(collector: Collector) -> None:
+    def calls(*tokens: int) -> Any:
+        async def node(state: MessagesState) -> dict[str, Any]:
+            _ = [await script(think("r", "t", input_tokens=n)).ainvoke(state["messages"]) for n in tokens]
+            return {}
+
+        return node
+
+    graph = state_graph(MessagesState)
+    graph.add_node("plan", calls(10, 20))
+    graph.add_node("speak", calls(30))
+    graph.add_edge(START, "plan")
+    graph.add_edge("plan", "speak")
+    tracker = Tracker(EventChannel(collector), LanggraphSourceAdapter(), pricer=lambda model, usage: 0.001)
+    with tracker.track("t1", {}) as tracked:
+        await graph.compile().ainvoke({"messages": []}, tracked.config)
+    spent = {
+        event.name: (usage.input_tokens, round(usage.cost_usd or 0, 6))
+        for event in collector.events
+        if event.kind in {EventKind.NODE, EventKind.RUN} and event.phase is EventPhase.END and (usage := event.usage)
+    }
+    assert spent == {"plan": (30, 0.002), "speak": (30, 0.001), "LangGraph": (60, 0.003)}

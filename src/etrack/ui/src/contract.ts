@@ -169,7 +169,8 @@ export interface ModelRef {
   params?: {};
 }
 /**
- * Tokens a model call spent, by kind, and its cost when the source knows it.
+ * Tokens a model call spent, by kind, and its cost when known; on a NODE's or a RUN's END, the total of every model
+ * call that ran under it.
  *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "Usage".

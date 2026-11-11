@@ -383,7 +383,7 @@
     },
     "Usage": {
       "title": "Usage",
-      "description": "Tokens a model call spent, by kind, and its cost when the source knows it.",
+      "description": "Tokens a model call spent, by kind, and its cost when known; on a NODE's or a RUN's END, the total of every model\ncall that ran under it.",
       "type": "object",
       "properties": {
         "input_tokens": {

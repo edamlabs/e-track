@@ -23,6 +23,7 @@ async def test_prometheus_counts_times_and_prices() -> None:
                 EventPhase.END,
                 kind=EventKind.LLM,
                 name="gemini",
+                node="plan",
                 latency_ms=1200.0,
                 model=ModelRef(name="gemini-2.5-flash"),
                 usage=Usage(input_tokens=10, output_tokens=4, cache_read_tokens=2, cost_usd=0.5),
@@ -36,10 +37,16 @@ async def test_prometheus_counts_times_and_prices() -> None:
         assert value("t_spans_total", {"kind": "llm", "name": "gemini", "status": "ok"}) == 1
         assert value("t_spans_total", {"kind": "tool", "name": "search", "status": "error"}) == 1
         assert value("t_span_seconds_count", {"kind": "llm", "name": "gemini"}) == 1
-        assert value("t_tokens_total", {"model": "gemini-2.5-flash", "type": "input"}) == 10
-        assert value("t_tokens_total", {"model": "gemini-2.5-flash", "type": "reasoning"}) is None
-        assert value("t_cost_usd_total", {"model": "gemini-2.5-flash"}) == 0.5
-        await metrics.send(PrometheusView.project(frame(4, EventPhase.END, kind=EventKind.RUN, name="agent")))
+        llm = {"model": "gemini-2.5-flash", "node": "plan"}
+        assert value("t_tokens_total", {**llm, "type": "input"}) == 10
+        assert value("t_tokens_total", {**llm, "type": "reasoning"}) is None
+        assert value("t_cost_usd_total", llm) == 0.5
+        ### the run's total is the call already counted: never twice.
+        total = Usage(input_tokens=10, output_tokens=4, cost_usd=0.5)
+        await metrics.send(
+            PrometheusView.project(frame(4, EventPhase.END, kind=EventKind.RUN, name="agent", usage=total))
+        )
+        assert value("t_tokens_total", {**llm, "type": "input"}) == 10
         assert value("t_runs_active") == 0
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=metrics.app), base_url="http://m") as client:
             scraped = (await client.get("/")).text

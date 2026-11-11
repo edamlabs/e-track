@@ -280,3 +280,14 @@ async def test_otlp_fact_named(spans: InMemorySpanExporter, logs: InMemoryLogRec
     assert "BoundaryCrossed" in [span.name for span in spans.get_finished_spans()]
     records = [data.log_record for data in logs.get_finished_logs()]
     assert [record.event_name for record in records] == ["etrack.run.start", "BoundaryCrossed"]
+
+
+async def test_otlp_run_totals_apart(spans: InMemorySpanExporter, root: str) -> None:
+    total = Usage(input_tokens=30, output_tokens=3, total_tokens=33, cost_usd=0.6)
+    async with OtlpDriver(span_exporters=[spans]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run"))
+        await driver.send(frame(1, EventPhase.END, id=root, kind=EventKind.RUN, name="run", usage=total))
+    attributes: dict[str, Any] = dict(spans.get_finished_spans()[0].attributes or {})
+    assert (attributes["etrack.usage.input_tokens"], attributes["etrack.usage.cost_usd"]) == (30, 0.6)
+    dialects = ("gen_ai.usage", "llm.token_count", "langfuse.observation.usage_details")
+    assert not [key for key in attributes if key.startswith(dialects)]

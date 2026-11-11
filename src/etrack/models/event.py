@@ -75,7 +75,8 @@ class Outcome(StrEnum):
 
 ##### SECTIONS #####
 class Usage(msgspec.Struct, frozen=True, kw_only=True):
-    """Tokens a model call spent, by kind, and its cost when the source knows it."""
+    """Tokens a model call spent, by kind, and its cost when known; on a NODE's or a RUN's END, the total of every model
+    call that ran under it."""
 
     input_tokens: int = 0
     output_tokens: int = 0
@@ -85,6 +86,19 @@ class Usage(msgspec.Struct, frozen=True, kw_only=True):
     cache_write_tokens: int = 0
     cost_usd: float | None = None
 
+    def __add__(self, other: Usage) -> Usage:
+        """Two spends as one: every count summed, the cost summed over what is known — unknown when neither is."""
+        costs = [cost for cost in (self.cost_usd, other.cost_usd) if cost is not None]
+        return Usage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            total_tokens=self.total_tokens + other.total_tokens,
+            reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+            cost_usd=sum(costs) if costs else None,
+        )
+
 
 class ModelRef(msgspec.Struct, frozen=True, kw_only=True):
     """Which model served a call: the provider, the model's name, and the request parameters worth keeping."""
@@ -92,6 +106,11 @@ class ModelRef(msgspec.Struct, frozen=True, kw_only=True):
     provider: str = ""
     name: str = ""
     params: dict[str, Any] = msgspec.field(default_factory=dict)
+
+
+### the project's prices: what a model call cost in US dollars, or `None` when the model is not priced. The library
+### ships no prices — they age faster than releases.
+type Pricer = Callable[[ModelRef, Usage], float | None]
 
 
 class Failure(msgspec.Struct, frozen=True, kw_only=True):

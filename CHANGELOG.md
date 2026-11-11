@@ -40,6 +40,13 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   under what is running, with `etrack.fact` and `etrack.fact.labels` attributes. Prometheus counts each fact in
   `fact_<name>_total` by its labels (breaking: `PrometheusAdapter.phases` gains INSTANT); OTLP names the span and the
   log record's `event_name` after it. `dispatch_custom_event` keeps working, untyped.
+- **Cost per node and per run** (TODO_recall 10): the fold adds every closed model call's usage to each NODE and RUN
+  above it, which close with the total (`Usage` sums with `+`). `Tracker(pricer=…)` takes a `Pricer`
+  (`(ModelRef, Usage) -> float | None`) that writes `cost_usd` on each model call the source did not price; the library
+  ships no prices. Prometheus counts tokens and cost from model calls only, labelled by `node` too (breaking: the
+  series gain the label); OTLP writes a NODE's or a RUN's totals under `etrack.usage.*` and keeps the GenAI,
+  OpenInference and Langfuse usage keys on model calls, so no backend counts a call twice. Breaking for a custom sink
+  that summed every frame's usage: NODE and RUN END now carry totals.
 
 ### Fixed
 

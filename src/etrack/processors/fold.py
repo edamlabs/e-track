@@ -19,7 +19,19 @@ from typing import Any, Final
 
 import msgspec
 
-from etrack.models.event import EventKind, EventPhase, Failure, Outcome, Part, Redact, RunEvent, RunScope, Usage
+from etrack.models.event import (
+    EventKind,
+    EventPhase,
+    Failure,
+    ModelRef,
+    Outcome,
+    Part,
+    Pricer,
+    Redact,
+    RunEvent,
+    RunScope,
+    Usage,
+)
 from etrack.ports.source import Edge
 
 type Emit = Callable[[RunEvent], None]
@@ -47,18 +59,29 @@ class FoldProcessor:
         "_emit",
         "_interrupted",
         "_open",
+        "_pricer",
         "_propagate",
         "_redact",
         "_root",
         "_scope",
         "_seq",
         "_spans",
+        "_spent",
         "_visits",
     )
 
-    def __init__(self, scope: RunScope, emit: Emit, redact: Redact | None = None, *, propagate: bool = False) -> None:
+    def __init__(
+        self,
+        scope: RunScope,
+        emit: Emit,
+        redact: Redact | None = None,
+        *,
+        propagate: bool = False,
+        pricer: Pricer | None = None,
+    ) -> None:
         self._scope = scope
         self._propagate = propagate
+        self._pricer = pricer
         self._emit = emit
         self._redact = redact
         self._seq = itertools.count()
@@ -72,6 +95,8 @@ class FoldProcessor:
         ### the root's attributes every frame carries when propagating; what the run annotated, for its END.
         self._carried: dict[str, Any] = {}
         self._annotated: dict[str, Any] = {}
+        ### what the model calls under each open NODE and RUN spent so far.
+        self._spent: dict[str, Usage] = {}
 
     ##### PRIVATE #####
 
@@ -118,6 +143,43 @@ class FoldProcessor:
             **fields,
         )
         self._emit(event if self._redact is None else event.masked(self._redact))
+
+    def _close_spent(self, opened: OpenSpan, usage: Usage | None) -> Usage | None:
+        ### a model call is priced and added to every NODE and RUN above it; a NODE or a RUN closes with its total.
+        match (opened.edge.kind, usage):
+            case (EventKind.LLM, Usage() as spent):
+                priced = self._close_priced(opened, spent)
+                _ = [self._close_add(above, priced) for above in self._close_above(opened.parent)]
+                return priced
+            case (EventKind.NODE | EventKind.RUN, None):
+                return self._spent.pop(opened.edge.id, None)
+            case _:
+                return usage
+
+    def _close_priced(self, opened: OpenSpan, usage: Usage) -> Usage:
+        ### a cost the source already knows stands; the project's pricer fills the ones it does not.
+        match self._pricer:
+            case None:
+                return usage
+            case pricer:
+                priced = usage.cost_usd is not None
+                return (
+                    usage
+                    if priced
+                    else msgspec.structs.replace(usage, cost_usd=pricer(opened.edge.model or ModelRef(), usage))
+                )
+
+    def _close_above(self, parent: str) -> list[str]:
+        ### the open NODE and RUN spans from a span's parent up to the root.
+        match self._open.get(parent):
+            case OpenSpan(edge=edge, parent=up):
+                here = [edge.id] if edge.kind in {EventKind.NODE, EventKind.RUN} else []
+                return [*here, *self._close_above(up)]
+            case _:
+                return []
+
+    def _close_add(self, span: str, usage: Usage) -> None:
+        self._spent[span] = self._spent[span] + usage if span in self._spent else usage
 
     def _open_root(self, edge: Edge) -> None:
         ### the first kept span is the run's root: what it carries, every frame carries when propagating.
@@ -189,7 +251,8 @@ class FoldProcessor:
                 latency = round((time.perf_counter() - opened.began) * MS, 3)
                 phase = EventPhase.END if error is None else EventPhase.ERROR
                 run = self._close_run(span, error)
-                self._common_frame(opened, phase, payload, latency_ms=latency, usage=usage, error=error, **run)
+                spent = self._close_spent(opened, usage)
+                self._common_frame(opened, phase, payload, latency_ms=latency, usage=spent, error=error, **run)
             case _:
                 pass
 

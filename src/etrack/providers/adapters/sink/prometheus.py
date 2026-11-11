@@ -1,7 +1,8 @@
 """providers/adapters/sink/prometheus: PrometheusAdapter — every run counted, timed and priced as Prometheus metrics.
 
 Each closed span counts once, by kind, name and outcome, and its latency lands in a histogram; model calls add their
-tokens by type and their cost; runs in flight are a gauge. Each typed fact (`etrack.models.fact`) counts in a counter of
+tokens by type and their cost, by model and by the node that made them (a NODE's or a RUN's total is never counted
+again); runs in flight are a gauge. Each typed fact (`etrack.models.fact`) counts in a counter of
 its own, `fact_<name>`, split by the fields its class marks as labels. The registry is the adapter's own, so two adapters never
 collide. Prometheus scrapes `app` — mount it in the host (`/metrics`) or serve it with `GranianAdapter` — and Grafana
 reads Prometheus. Names stay bounded: a span's name is its node, tool or model, never a free text."""
@@ -32,6 +33,7 @@ class PrometheusView(EventView, frozen=True, kw_only=True):
     kind: EventKind
     phase: EventPhase
     name: str = ""
+    node: str = ""
     latency_ms: float | None = None
     model: ModelRef | None = None
     usage: Usage | None = None
@@ -62,17 +64,16 @@ class PrometheusAdapter:
             "span_seconds", "Span latency", ["kind", "name"], namespace=ns, registry=registry, buckets=config["buckets"]
         )
         self._active = Gauge("runs_active", "Runs in flight", namespace=ns, registry=registry)
-        self._tokens = Counter("tokens", "Model tokens", ["model", "type"], namespace=ns, registry=registry)
-        self._cost = Counter("cost_usd", "Model cost in US dollars", ["model"], namespace=ns, registry=registry)
+        self._tokens = Counter("tokens", "Model tokens", ["model", "node", "type"], namespace=ns, registry=registry)
+        self._cost = Counter("cost_usd", "Model cost in US dollars", ["model", "node"], namespace=ns, registry=registry)
         self._facts: dict[str, Counter] = {}
 
     ##### PRIVATE #####
 
     def _send_spent(self, view: PrometheusView) -> None:
-        match view.usage:
-            case None:
-                pass
-            case usage:
+        ### model calls only: a NODE's or a RUN's usage is the total of calls already counted.
+        match (view.kind, view.usage):
+            case (EventKind.LLM, Usage() as usage):
                 model = (view.model or ModelRef()).name or view.name
                 spent = {
                     "input": usage.input_tokens,
@@ -81,8 +82,10 @@ class PrometheusAdapter:
                     "cache_write": usage.cache_write_tokens,
                     "reasoning": usage.reasoning_tokens,
                 }
-                _ = [self._tokens.labels(model, kind).inc(count) for kind, count in spent.items() if count]
-                _ = usage.cost_usd and self._cost.labels(model).inc(usage.cost_usd)
+                _ = [self._tokens.labels(model, view.node, kind).inc(count) for kind, count in spent.items() if count]
+                _ = usage.cost_usd and self._cost.labels(model, view.node).inc(usage.cost_usd)
+            case _:
+                pass
 
     def _send_closed(self, view: PrometheusView) -> None:
         failed = view.phase is EventPhase.ERROR or view.error is not None
