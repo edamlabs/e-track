@@ -44,8 +44,10 @@ Every error e-track raises descends from one root, `etrack.infra.errors.CoreErro
 | Error | Raised when |
 |---|---|
 | `ChannelError` | an emitted frame is not a valid `RunEvent` (a required field missing or of the wrong type) |
+| `FactError` | a fact that does not meet its own class: a field of the wrong type, or a label that is no closed set |
 | `BusError` | publishing on a bus that is not open, or a bus whose supervisor died before opening |
 | `SinkError` | a sink used before it is open |
+| `AdapterError` | an outbox used before it is open |
 | `SourceError` | a config the framework does not take, or a graph the topology adapter cannot read |
 | `ServerError` | the viewer's port is taken, or its server does not answer in time |
 | `LayoutError` | a topology whose arcs reach nodes it does not declare |

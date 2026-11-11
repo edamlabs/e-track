@@ -24,8 +24,9 @@ async with PrometheusAdapter() as metrics:
 | `etrack_spans_total` | `kind`, `name`, `status` (`ok`, `error`) | every closed span |
 | `etrack_span_seconds` | `kind`, `name` | span latency, a histogram |
 | `etrack_runs_active` | | runs in flight |
-| `etrack_tokens_total` | `model`, `type` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`) | model tokens |
-| `etrack_cost_usd_total` | `model` | model cost, when the source knows it |
+| `etrack_tokens_total` | `model`, `node`, `type` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`) | model tokens, from model calls only |
+| `etrack_cost_usd_total` | `model`, `node` | model cost, when the source or your `Pricer` knows it |
+| `etrack_fact_<name>_total` | the fact's `labels` | one counter per typed fact → [The run from inside](../advanced/runs.md) |
 
 A span's `name` is its node, tool, subagent or model — bounded by your graph and your tools, never free text.
 

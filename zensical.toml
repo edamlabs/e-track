@@ -23,12 +23,14 @@ nav = [
   { "Advanced" = [
     { "The record" = "advanced/record.md" },
     { "Own spans, facts and masks" = "advanced/spans.md" },
+    { "The run from inside" = "advanced/runs.md" },
     { "Custom sinks and policies" = "advanced/sinks.md" },
     { "Custom drivers (HTTP)" = "advanced/drivers.md" },
     { "Authentication" = "advanced/auth.md" },
     { "Graphs and labels" = "advanced/graphs.md" },
     { "Logging" = "advanced/logging.md" },
     { "Settings and errors" = "advanced/settings.md" },
+    { "Upgrading to 0.6" = "advanced/migration.md" },
   ] },
   { "Integrations" = [
     { "LangGraph and deepagents" = "integrations/langgraph.md" },

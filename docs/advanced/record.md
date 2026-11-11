@@ -54,12 +54,13 @@ An LLM call's `end` frame, as a sink receives it (the values are illustrative; t
 | `phase` | where the span is in its life (below) |
 | `part` | on `delta` frames only: what the streamed piece carries (below) |
 | `name` | the node's, model's, tool's or subagent's name |
-| `node`, `ns`, `step`, `visit` | graph coordinates: the node a span runs under, its subgraph path, the superstep, how many times the run entered that node |
+| `node`, `ns`, `step`, `visit` | graph coordinates: the node a span runs under, its subgraph path, the superstep, how many times the run entered that node at that mount |
 | `message_id`, `call_id` | the chat message and the tool call a UI renders the frame into |
 | `at`, `latency_ms` | when, in UTC; how long the span took (on `end` and `error`) |
 | `model` | which model served an LLM call: provider, name, request parameters |
-| `usage` | tokens by kind — input, output, reasoning, cache read/write — and cost when known |
+| `usage` | tokens by kind — input, output, reasoning, cache read/write — and cost when known; on a node's or the run's END, the total of the model calls under it |
 | `error` | why a span failed: the exception's type and message |
+| `input`, `output`, `outcome` | on the run's root END: what the run declared it took in and published (`run.declare`), and how it ended — `completed`, `interrupted`, `failed` → [The run from inside](runs.md) |
 | `payload` | what the span carried: inputs on `start`, outputs on `end`, the piece on `delta` — after your redaction |
 | `attributes` | the open extension bag, namespaced by its owner (`app.*` for the run's own facts, `etrack.*`) |
 
