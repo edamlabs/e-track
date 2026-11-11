@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import google.auth
+import msgspec
 import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
@@ -14,7 +15,7 @@ from pydantic import SecretStr
 from etrack.infra.config.auth import BearerAuth, GoogleAuth
 from etrack.infra.config.providers import OtlpConfig, OtlpTarget
 from etrack.infra.errors import SinkError
-from etrack.models.event import EventKind, EventPhase, Failure, Part, Usage
+from etrack.models.event import EventKind, EventPhase, Failure, Outcome, Part, Usage
 from etrack.ports.sink import SinkPort
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 from support.collector import fake_collector
@@ -252,3 +253,17 @@ async def test_otlp_bearer_target_merged(
         await run_tree(driver)
         assert await driver.flush()
     assert all((h["Authorization"], h["X-Tenant"]) == ("Bearer t", "a") for h in collector.headers)
+
+
+async def test_otlp_run_declared(spans: InMemorySpanExporter, root: str) -> None:
+    async with OtlpDriver(span_exporters=[spans]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run", payload={"input": {}}))
+        ended = frame(1, EventPhase.END, id=root, kind=EventKind.RUN, name="run", payload={"keys": ["messages"]})
+        await driver.send(msgspec.structs.replace(ended, input="hola", output="adiós", outcome=Outcome.COMPLETED))
+    attributes: dict[str, Any] = dict(spans.get_finished_spans()[0].attributes or {})
+    assert (attributes["input.value"], attributes["output.value"]) == ("hola", "adiós")
+    assert json.loads(attributes["gen_ai.output.messages"]) == [
+        {"role": "assistant", "parts": [{"type": "text", "content": "adiós"}]}
+    ]
+    assert json.loads(attributes["gen_ai.input.messages"])[0]["role"] == "user"
+    assert attributes["etrack.outcome"] == "completed"

@@ -10,6 +10,7 @@ sections (`model`, `usage`, `error`) and the open `attributes` bag, namespaced b
 project that needs more subclasses `RunEvent` and hands the subclass to the channel. A client never reads the record
 whole: it declares an `EventView` with the fields it needs and `project` narrows any event onto it."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum, auto
 from typing import Any, Final, Self
@@ -17,6 +18,9 @@ from typing import Any, Final, Self
 import msgspec
 
 VERSION: Final[int] = 1
+
+### the project's mask over what a frame carried: a payload in, the payload a sink may see out.
+type Redact = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 ##### AXES #####
@@ -59,6 +63,14 @@ class Part(StrEnum):
     VIDEO = auto()
     FILE = auto()
     CUSTOM = auto()
+
+
+class Outcome(StrEnum):
+    """How a run ended: it ran to its end, it stopped to ask (an interrupt, resumed by a later run), or it failed."""
+
+    COMPLETED = auto()
+    INTERRUPTED = auto()
+    FAILED = auto()
 
 
 ##### SECTIONS #####
@@ -112,7 +124,10 @@ class RunEvent(EventView, frozen=True, kw_only=True):
 
     `node`, `ns` and `step` are the graph coordinates when the source has a graph (the node a span runs under, its
     subgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and
-    `call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR."""
+    `call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.
+
+    The run's root closes with what the run declared — `input`, what entered, and `output`, what it published, each set
+    by the code that said it (`run.declare`), never inferred — and its `outcome`; no declaration, no field."""
 
     v: int = VERSION
     run_id: str
@@ -135,6 +150,9 @@ class RunEvent(EventView, frozen=True, kw_only=True):
     model: ModelRef | None = None
     usage: Usage | None = None
     error: Failure | None = None
+    input: str | None = None
+    output: str | None = None
+    outcome: Outcome | None = None
     payload: dict[str, Any] = msgspec.field(default_factory=dict)
     attributes: dict[str, Any] = msgspec.field(default_factory=dict)
 
@@ -147,6 +165,15 @@ class RunEvent(EventView, frozen=True, kw_only=True):
     def dedupe_key(self) -> str:
         """What makes a frame unique across redeliveries: its run, its span and the edge of the span it marks."""
         return f"{self.run_id}:{self.id}:{self.phase}:{self.seq}"
+
+    def masked(self, redact: Redact) -> Self:
+        """The frame as a mask lets it through: its payload, and the run's declared words, each passed through `redact`;
+        a declared word the mask drops is gone."""
+        declared = {key: text for key, text in (("input", self.input), ("output", self.output)) if text is not None}
+        said = redact(declared) if declared else {}
+        return msgspec.structs.replace(
+            self, payload=redact(self.payload), input=said.get("input"), output=said.get("output")
+        )
 
 
 class LogView(EventView, frozen=True, kw_only=True):

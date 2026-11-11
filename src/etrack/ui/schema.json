@@ -156,7 +156,7 @@
     },
     "RunEvent": {
       "title": "RunEvent",
-      "description": "One frame of a run: who, where in the tree, what and when, and what it carried.\n\n`node`, `ns` and `step` are the graph coordinates when the source has a graph (the node a span runs under, its\nsubgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and\n`call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.",
+      "description": "One frame of a run: who, where in the tree, what and when, and what it carried.\n\n`node`, `ns` and `step` are the graph coordinates when the source has a graph (the node a span runs under, its\nsubgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and\n`call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.\n\nThe run's root closes with what the run declared — `input`, what entered, and `output`, what it published, each set\nby the code that said it (`run.declare`), never inferred — and its `outcome`; no declaration, no field.",
       "type": "object",
       "properties": {
         "v": {
@@ -286,6 +286,39 @@
           ],
           "default": null
         },
+        "input": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outcome"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "payload": {
           "type": "object",
           "default": {}
@@ -406,6 +439,15 @@
       },
       "required": [
         "type"
+      ]
+    },
+    "Outcome": {
+      "title": "Outcome",
+      "description": "How a run ended: it ran to its end, it stopped to ask (an interrupt, resumed by a later run), or it failed.",
+      "enum": [
+        "completed",
+        "failed",
+        "interrupted"
       ]
     }
   }

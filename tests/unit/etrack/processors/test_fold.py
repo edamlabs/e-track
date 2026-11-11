@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from etrack.models.event import EventKind, EventPhase, Failure, Part, RunEvent, RunScope, Usage
+from etrack.models.event import EventKind, EventPhase, Failure, Outcome, Part, RunEvent, RunScope, Usage
 from etrack.ports.source import Edge, FoldPort
 from etrack.processors.fold import FoldProcessor
 from unit.etrack.conftest import RUN
@@ -134,11 +134,6 @@ async def test_fold_redacts_every_payload(emitted: list[RunEvent], edge: Callabl
     assert [event.payload for event in emitted] == [{"input": "***"}, {"delta": "***"}, {"text": "***"}]
 
 
-async def test_fold_keep_identity() -> None:
-    payload = {"a": 1}
-    assert FoldProcessor._common_keep(payload) is payload
-
-
 async def test_fold_span_ok(fold: FoldProcessor, emitted: list[RunEvent], edge: Callable[..., Edge]) -> None:
     fold.open(edge("r", kind=EventKind.RUN))
     with fold.span("gate", kind=EventKind.EVALUATION, payload={"rule": "shacl"}) as span:
@@ -164,3 +159,39 @@ async def test_fold_own_span_extras(fold: FoldProcessor, emitted: list[RunEvent]
         (EventPhase.START, {"tenant": "acme", "k": 5}),
         (EventPhase.END, {"tenant": "acme", "k": 5}),
     ]
+
+
+##### DECLARED #####
+async def test_fold_root_declares(fold: FoldProcessor, emitted: list[RunEvent], edge: Callable[..., Edge]) -> None:
+    fold.open(edge("r", kind=EventKind.RUN))
+    fold.open(edge("n", "r"))
+    fold.declare(input="hola")
+    fold.declare(output="borrador")
+    fold.declare(output="respuesta")
+    fold.close("n", {})
+    fold.close("r", {})
+    node, run = emitted[-2:]
+    assert (node.input, node.output, node.outcome) == (None, None, None)
+    assert (run.input, run.output, run.outcome) == ("hola", "respuesta", Outcome.COMPLETED)
+
+
+async def test_fold_root_undeclared(fold: FoldProcessor, emitted: list[RunEvent], edge: Callable[..., Edge]) -> None:
+    fold.open(edge("r", kind=EventKind.RUN))
+    fold.close("r", {}, error=Failure(type="ValueError"))
+    assert (emitted[-1].input, emitted[-1].output, emitted[-1].outcome) == (None, None, Outcome.FAILED)
+
+
+async def test_fold_root_interrupted(fold: FoldProcessor, emitted: list[RunEvent], edge: Callable[..., Edge]) -> None:
+    fold.open(edge("r", kind=EventKind.RUN))
+    fold.instant(edge("r:interrupt", "r", kind=EventKind.INTERRUPT))
+    fold.close("r", {})
+    assert emitted[-1].outcome is Outcome.INTERRUPTED
+
+
+async def test_fold_declared_masked(scope: RunScope, edge: Callable[..., Edge]) -> None:
+    emitted: list[RunEvent] = []
+    fold = FoldProcessor(scope, emitted.append, lambda payload: {key: "***" for key in payload if key != "output"})
+    fold.open(edge("r", kind=EventKind.RUN, payload={"a": 1}))
+    fold.declare(input="secreto", output="se va")
+    fold.close("r", {})
+    assert (emitted[0].payload, emitted[-1].input, emitted[-1].output) == ({"a": "***"}, "***", None)

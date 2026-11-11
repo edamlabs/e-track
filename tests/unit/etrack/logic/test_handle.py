@@ -3,15 +3,18 @@
 import asyncio
 from typing import Any
 
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState
+from langgraph.types import interrupt
 
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.logic.handle import run
-from etrack.models.event import EventKind, EventPhase
+from etrack.models.event import EventKind, EventPhase, Outcome
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
 from support.events import by
 from support.graph import state_graph
+from support.model import script
 from unit.etrack.conftest import Collector
 
 
@@ -81,3 +84,56 @@ async def test_handle_concurrent_runs_apart() -> None:
     assert {event.run_id for event in tracker_a.events} == {run_a}
     assert {event.run_id for event in tracker_b.events} == {run_b}
     assert not run.active
+
+
+##### DECLARED #####
+def _spoken() -> Any:
+    """`speak` answers and declares it; `refine` calls a model after it — the last model call is not what was said."""
+
+    async def speak(state: MessagesState) -> dict[str, Any]:
+        answer = await script("final answer").ainvoke(state["messages"])
+        run.declare(output=str(answer.content))
+        return {"messages": [answer]}
+
+    async def refine(state: MessagesState) -> dict[str, Any]:
+        await script("a refiner's rewrite").ainvoke(state["messages"])
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("speak", speak)
+    graph.add_node("refine", refine)
+    graph.add_edge(START, "speak")
+    graph.add_edge("speak", "refine")
+    graph.add_edge("refine", END)
+    return graph.compile()
+
+
+async def test_handle_declared_output_wins(collector: Collector) -> None:
+    with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
+        run.declare(input="hola")
+        await _spoken().ainvoke({"messages": [("user", "hola")]}, tracked.config)
+    (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
+    assert (ended.input, ended.output, ended.outcome) == ("hola", "final answer", Outcome.COMPLETED)
+
+
+async def test_handle_undeclared_absent(collector: Collector) -> None:
+    run.declare(output="nobody hears this")
+    with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
+        await _ranked().ainvoke({"messages": []}, tracked.config)
+    (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
+    assert (ended.input, ended.output) == (None, None)
+
+
+async def test_handle_interrupted_outcome(collector: Collector) -> None:
+    def ask(state: MessagesState) -> dict[str, Any]:
+        interrupt({"q": "?"})
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("ask", ask)
+    graph.add_edge(START, "ask")
+    compiled = graph.compile(checkpointer=InMemorySaver())
+    with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
+        await compiled.ainvoke({"messages": []}, {**tracked.config, "configurable": {"thread_id": "t1"}})
+    (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
+    assert ended.outcome is Outcome.INTERRUPTED

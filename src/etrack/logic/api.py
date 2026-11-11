@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING
 import structlog
 
 from etrack.logic.handle import RUNNING, Running
-from etrack.models.event import RunScope
+from etrack.models.event import Redact, RunScope
 from etrack.ports.source import LocatePort
-from etrack.processors.fold import FoldProcessor, Redact
+from etrack.processors.fold import FoldProcessor
 
 if TYPE_CHECKING:
     from collections.abc import Generator

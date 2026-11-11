@@ -53,5 +53,13 @@ class RunHandle:
             case _:
                 yield ""
 
+    def declare(self, input: str | None = None, output: str | None = None) -> None:  # noqa: A002 — the run's own word
+        """What the run took in, what it published: stated by the code that says it, carried on the run's END."""
+        match RUNNING.get():
+            case Running(fold=fold):
+                fold.declare(input=input, output=output)
+            case _:
+                pass
+
 
 run = RunHandle()

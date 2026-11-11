@@ -11,6 +11,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   context variable, LangGraph carries it into its tasks, and the span hangs from what is running where it opens (the
   source locates it: `LocatePort`, met by the LangGraph source through LangChain's own context). Outside a run every
   call is a no-op; two concurrent runs never cross.
+- **What a run took in and published, declared** (TODO_recall 4): `run.declare(input=…, output=…)` from the code that
+  says it; the run's root END carries `input`, `output` and its `outcome` — `completed`, `interrupted` (an interrupt
+  was raised in the run) or `failed`. Nothing is inferred: a run that declares no output has none, whatever model call
+  came last. OTLP writes them as `input.value`/`output.value`, `gen_ai.input.messages`/`gen_ai.output.messages` and
+  `etrack.outcome`. The record only grows (`VERSION` stays 1); a project's `redact` masks the declared words too
+  (`RunEvent.masked`), and `Redact` moves to `etrack.models.event`.
 
 ### Fixed
 
