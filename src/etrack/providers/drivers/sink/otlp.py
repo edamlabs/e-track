@@ -32,7 +32,8 @@ from etrack.infra import defaults
 from etrack.infra.auth import AuthSigner
 from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
-from etrack.models.event import EventKind, EventPhase, EventView, Failure, ModelRef, Part, Usage
+from etrack.models.event import EventKind, EventPhase, EventView, Failure, ModelRef, Outcome, Part, Usage
+from etrack.models.fact import FACT
 from etrack.ops.w3c import w3c_span, w3c_trace
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
@@ -130,6 +131,9 @@ class OtlpView(EventView, frozen=True, kw_only=True):
     model: ModelRef | None = None
     usage: Usage | None = None
     error: Failure | None = None
+    input: str | None = None
+    output: str | None = None
+    outcome: Outcome | None = None
     payload: dict[str, Any] = msgspec.field(default_factory=dict)
     attributes: dict[str, Any] = msgspec.field(default_factory=dict)
 
@@ -290,10 +294,28 @@ class OtlpDriver:
                     "gen_ai.usage.reasoning.output_tokens": usage.reasoning_tokens,
                 }
 
+    @staticmethod
+    def _send_totals(view: OtlpView) -> dict[str, Primitive]:
+        """What the model calls under a NODE or a RUN spent, under etrack's own keys: a backend that sums its generations
+        never counts them twice."""
+        match view.usage:
+            case Usage() as usage if view.kind is not EventKind.LLM:
+                totals = {
+                    "etrack.usage.input_tokens": usage.input_tokens,
+                    "etrack.usage.output_tokens": usage.output_tokens,
+                    "etrack.usage.total_tokens": usage.total_tokens,
+                    "etrack.usage.cost_usd": usage.cost_usd,
+                }
+                return {key: value for key, value in totals.items() if value is not None}
+            case _:
+                return {}
+
     @classmethod
     def _send_attributes(cls, view: OtlpView) -> dict[str, Primitive]:
         """The span's attributes in the three dialects, from what the frame carries."""
-        model, usage = view.model or ModelRef(), view.usage
+        model = view.model or ModelRef()
+        ### the dialects' usage keys are a model call's: GenAI, OpenInference and Langfuse sum them over the trace.
+        usage = view.usage if view.kind is EventKind.LLM else None
         named = {
             "etrack.run_id": view.run_id,
             "etrack.thread_id": view.thread_id,
@@ -328,9 +350,31 @@ class OtlpDriver:
             **{key: value for key, value in named.items() if value},
             **{key: value for key, value in measured.items() if value is not None},
             **cls._send_usage(usage),
+            **cls._send_totals(view),
+            **({"etrack.cost_usd": usage.cost_usd} if usage and usage.cost_usd is not None else {}),
             **params,
             **extra,
         }
+
+    @classmethod
+    def _send_said(cls, view: OtlpView) -> dict[str, Primitive]:
+        """What the run declared it took in and published: OpenInference's values, GenAI's messages, and how it ended."""
+        said = {
+            "input.value": view.input,
+            "output.value": view.output,
+            "gen_ai.input.messages": cls._send_messages("user", view.input),
+            "gen_ai.output.messages": cls._send_messages("assistant", view.output),
+            "etrack.outcome": view.outcome and str(view.outcome),
+        }
+        return {key: value for key, value in said.items() if value is not None}
+
+    @classmethod
+    def _send_messages(cls, role: str, text: str | None) -> Primitive | None:
+        match text:
+            case None:
+                return None
+            case said:
+                return cls._common_flat([{"role": role, "parts": [{"type": "text", "content": said}]}])
 
     def _send_parent(self, view: OtlpView) -> Any:
         """The context a new span hangs from: its parent open, its parent closed in this run, or a fresh trace."""
@@ -362,6 +406,7 @@ class OtlpDriver:
     def _send_end(self, span: Span, view: OtlpView) -> None:
         span.set_attributes(self._send_attributes(view))
         _ = view.payload and span.set_attribute("output.value", self._common_flat(view.payload))
+        span.set_attributes(self._send_said(view))
         match view.error:
             case None:
                 span.set_status(Status(StatusCode.OK))
@@ -394,7 +439,7 @@ class OtlpDriver:
                         severity_number=SEVERITIES[view.phase],
                         severity_text=str(view.phase),
                         body=view.name or str(view.kind),
-                        event_name=f"etrack.{view.kind}.{view.phase}",
+                        event_name=view.attributes.get(FACT) or f"etrack.{view.kind}.{view.phase}",
                         attributes=self._send_attributes(view),
                     )
                 )

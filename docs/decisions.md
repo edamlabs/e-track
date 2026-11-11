@@ -166,3 +166,24 @@ reads (mutation-checked: an `infra.settings` import in `LiveAdapter` fails it), 
 zero-config `OtlpDriver()` the README teaches. Keeping `OtlpSettings(...)` as the override object: a settings class
 below the root, the thing the law forbids. The lazy composer and its `LazyProxy`, and `ops/file.FileFinder` that fed it.
 
+### 2026-11-11 · Guaranteed delivery: an outbox on the standard library's SQLite, durable on commit
+
+**Decision.** e-track guarantees delivery through an outbox port: an HTTP driver handed an `OutboxPort` stores each
+item before any network call, and a relay settles every claim — acked, released to the next step of a schedule, dead
+with its reason. The reference store is `SqliteAdapter`: stdlib `sqlite3` on a worker thread, one connection, WAL,
+`synchronous=FULL`. A guaranteed subscription's bus queue is unbounded instead of dropping. The guarantee begins at the
+append; what a run held in memory is the host's to reconcile.
+
+**Evidence.** Fenced bench, `tests/benchmark/etrack/providers/adapters/outbox/arms.py` (one committed append per call,
+5 interleaved rounds × 300, ext4 on NVMe, SQLite 3.50.4, aiosqlite 0.22.1): stdlib + thread FULL 6.45 ms/append,
+aiosqlite FULL 6.34 ms; stdlib + thread NORMAL 0.045 ms, aiosqlite NORMAL 0.064 ms. The binding does not matter — the
+builtin wins (reach order, one dependency fewer). FULL costs a hundredfold NORMAL, all of it the fsync: one append per
+run, on the sink's own worker, off the loop, is ~160 runs a second per process — far above a chat's rate, and it
+survives a lost machine, which NORMAL in WAL does not. Tested: the SIGKILL-and-restart criterion (100 of 100, none
+twice), a full bus (capacity 1, 200 runs, nothing dropped), one bad item dead while the batch's others are delivered,
+the deadline, the requeue.
+
+**Rejected.** aiosqlite — a thread wrapper over the same `sqlite3`, no faster here. `synchronous=NORMAL` — durable
+against a killed process only. OpenTelemetry's export path as the model — a bounded queue that drops by design. A
+transactional guarantee with the host's own checkpoint — a callback-fed tracer cannot join the host's transaction. A
+Postgres store in the library — a consumer with a job table meets the port with it.

@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import google.auth
+import msgspec
 import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
@@ -14,7 +15,7 @@ from pydantic import SecretStr
 from etrack.infra.config.auth import BearerAuth, GoogleAuth
 from etrack.infra.config.providers import OtlpConfig, OtlpTarget
 from etrack.infra.errors import SinkError
-from etrack.models.event import EventKind, EventPhase, Failure, Part, Usage
+from etrack.models.event import EventKind, EventPhase, Failure, Outcome, Part, Usage
 from etrack.ports.sink import SinkPort
 from etrack.providers.drivers.sink.otlp import OtlpDriver
 from support.collector import fake_collector
@@ -252,3 +253,41 @@ async def test_otlp_bearer_target_merged(
         await run_tree(driver)
         assert await driver.flush()
     assert all((h["Authorization"], h["X-Tenant"]) == ("Bearer t", "a") for h in collector.headers)
+
+
+async def test_otlp_run_declared(spans: InMemorySpanExporter, root: str) -> None:
+    async with OtlpDriver(span_exporters=[spans]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run", payload={"input": {}}))
+        ended = frame(1, EventPhase.END, id=root, kind=EventKind.RUN, name="run", payload={"keys": ["messages"]})
+        await driver.send(msgspec.structs.replace(ended, input="hola", output="adiós", outcome=Outcome.COMPLETED))
+    attributes: dict[str, Any] = dict(spans.get_finished_spans()[0].attributes or {})
+    assert (attributes["input.value"], attributes["output.value"]) == ("hola", "adiós")
+    assert json.loads(attributes["gen_ai.output.messages"]) == [
+        {"role": "assistant", "parts": [{"type": "text", "content": "adiós"}]}
+    ]
+    assert json.loads(attributes["gen_ai.input.messages"])[0]["role"] == "user"
+    assert attributes["etrack.outcome"] == "completed"
+
+
+async def test_otlp_fact_named(spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter, root: str) -> None:
+    fact = {"etrack.fact": "BoundaryCrossed", "etrack.fact.labels": ["area"]}
+    async with OtlpDriver(span_exporters=[spans], log_exporters=[logs]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run"))
+        await driver.send(
+            frame(1, EventPhase.INSTANT, parent=root, kind=EventKind.CUSTOM, name="BoundaryCrossed", attributes=fact)
+        )
+        assert await driver.flush()
+    assert "BoundaryCrossed" in [span.name for span in spans.get_finished_spans()]
+    records = [data.log_record for data in logs.get_finished_logs()]
+    assert [record.event_name for record in records] == ["etrack.run.start", "BoundaryCrossed"]
+
+
+async def test_otlp_run_totals_apart(spans: InMemorySpanExporter, root: str) -> None:
+    total = Usage(input_tokens=30, output_tokens=3, total_tokens=33, cost_usd=0.6)
+    async with OtlpDriver(span_exporters=[spans]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run"))
+        await driver.send(frame(1, EventPhase.END, id=root, kind=EventKind.RUN, name="run", usage=total))
+    attributes: dict[str, Any] = dict(spans.get_finished_spans()[0].attributes or {})
+    assert (attributes["etrack.usage.input_tokens"], attributes["etrack.usage.cost_usd"]) == (30, 0.6)
+    dialects = ("gen_ai.usage", "llm.token_count", "langfuse.observation.usage_details")
+    assert not [key for key in attributes if key.startswith(dialects)]

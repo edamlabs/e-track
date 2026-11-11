@@ -51,6 +51,13 @@ export type EventPhase = "delta" | "end" | "error" | "instant" | "start";
  * via the `definition` "Part".
  */
 export type Part = "audio" | "custom" | "file" | "image" | "reasoning" | "text" | "tool_call" | "video";
+/**
+ * How a run ended: it ran to its end, it stopped to ask (an interrupt, resumed by a later run), or it failed.
+ *
+ * This interface was referenced by `Contract`'s JSON-Schema
+ * via the `definition` "Outcome".
+ */
+export type Outcome = "completed" | "failed" | "interrupted";
 
 export interface Contract {}
 /**
@@ -116,6 +123,9 @@ export interface LiveSummary {
  * subgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and
  * `call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.
  *
+ * The run's root closes with what the run declared — `input`, what entered, and `output`, what it published, each set
+ * by the code that said it (`run.declare`), never inferred — and its `outcome`; no declaration, no field.
+ *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "RunEvent".
  */
@@ -141,6 +151,9 @@ export interface RunEvent {
   model?: ModelRef | null;
   usage?: Usage | null;
   error?: Failure | null;
+  input?: string | null;
+  output?: string | null;
+  outcome?: Outcome | null;
   payload?: {};
   attributes?: {};
 }
@@ -156,7 +169,8 @@ export interface ModelRef {
   params?: {};
 }
 /**
- * Tokens a model call spent, by kind, and its cost when the source knows it.
+ * Tokens a model call spent, by kind, and its cost when known; on a NODE's or a RUN's END, the total of every model
+ * call that ran under it.
  *
  * This interface was referenced by `Contract`'s JSON-Schema
  * via the `definition` "Usage".

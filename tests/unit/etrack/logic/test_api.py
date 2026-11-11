@@ -46,6 +46,17 @@ async def test_tracker_redacts(collector: Collector, graph: Any) -> None:
     assert all(event.payload == {} for event in collector.events)
 
 
+async def test_tracker_mask_reaches_unmasked_sink(graph: Any) -> None:
+    sink = RecordingSink()
+    async with AnyioAdapter() as bus:
+        bus.subscribe(sink)
+        tracker = Tracker(EventChannel(bus, forward=None), LanggraphSourceAdapter(), redact=lambda payload: {})
+        with tracker.track("t1", {}) as tracked:
+            await graph.ainvoke({"messages": [("user", "secret")]}, tracked.config)
+    assert sink.views
+    assert all(view.payload == {} for view in sink.views)  # ty: ignore[unresolved-attribute]
+
+
 async def test_tracker_own_span(collector: Collector, graph: Any) -> None:
     with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
         await graph.ainvoke({"messages": [("user", "hi")]}, tracked.config)

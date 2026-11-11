@@ -1,7 +1,8 @@
 # Own spans, facts and masks
 
 The fold that orders the framework's spans takes yours too, in the same tree — a retrieval you run by hand, an
-evaluation score, a fact about the run — and every payload passes through your mask first.
+evaluation score, a fact about the run — and every payload passes through your mask first. From code the run calls
+(a node, a tool), reach the run without passing it down → [The run from inside](runs.md).
 
 ```python
 import uuid
@@ -53,6 +54,18 @@ Every frame, with its payload:
 - The `app.tenant` metadata landed on the root span's `attributes` (`{'app.tenant': 'acme'}`): put a run's own facts —
   agent version, tenant, experiment arm — under `app.` and every backend sees them. A node's state outputs are
   reported by their keys, not their values: what a span carried in full is the model's and the tools' payloads.
+
+## A mask per sink
+
+`Tracker(redact=…)` masks what every sink receives. To let one sink receive clear text while the others never do, give
+the tracker no mask and each subscription its own:
+
+```python
+bus.subscribe(otlp, redact=mask)      # traces: masked
+bus.subscribe(memory)                 # your memory service: the words as said
+```
+
+A subscription's mask covers the payload and the run's declared words, on that sink's own worker.
 
 ## Extras — anything else, as structlog takes it
 

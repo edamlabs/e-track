@@ -66,6 +66,10 @@ class ChannelError(LogicError, ValueError):
     """An event the channel cannot validate against its model: a reserved key missing or of the wrong type."""
 
 
+class FactError(LogicError, TypeError):
+    """A fact that does not meet its own class: a field of the wrong type, or a label that is no closed set."""
+
+
 ##### OPS #####
 class OpsError(CoreError):
     """An agnostic tool refused its input."""

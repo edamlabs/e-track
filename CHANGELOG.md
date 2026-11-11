@@ -4,6 +4,65 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-11
+
+### Added
+
+- **The run in progress, reached from inside it** (TODO_recall 3): `etrack.logic.handle.run` — `run.span(...)` around
+  any block a node, a tool or a middleware calls, with no handle passed down: `Tracker.track` binds the run's fold in a
+  context variable, LangGraph carries it into its tasks, and the span hangs from what is running where it opens (the
+  source locates it: `LocatePort`, met by the LangGraph source through LangChain's own context). Outside a run every
+  call is a no-op; two concurrent runs never cross.
+- **What a run took in and published, declared** (TODO_recall 4): `run.declare(input=…, output=…)` from the code that
+  says it; the run's root END carries `input`, `output` and its `outcome` — `completed`, `interrupted` (an interrupt
+  was raised in the run) or `failed`. Nothing is inferred: a run that declares no output has none, whatever model call
+  came last. OTLP writes them as `input.value`/`output.value`, `gen_ai.input.messages`/`gen_ai.output.messages` and
+  `etrack.outcome`. The record only grows (`VERSION` stays 1); a project's `redact` masks the declared words too
+  (`RunEvent.masked`), and `Redact` moves to `etrack.models.event`.
+- **Run attributes and a gate that fails closed** (TODO_recall 5): `run.annotate(**attributes)` adds what the run
+  learnt on its way to its root's END; `Tracker(propagate=True)` puts the root's attributes (the host's `app.*`) on
+  every frame. `RunView` (`etrack.models.event`) reads a run as its root closes it — declared words, outcome,
+  attributes — and `ended` says when a frame is that close. `HttpDriver`'s `accept` is the project's gate and fails
+  closed: one that reads a key the event does not carry refuses the event and counts it (`missing`). The library holds
+  no rule; the plan's `RunSink` base is this view and this gate (a driver may not subclass another driver: the tree's
+  layers).
+- **A mask per subscription** (TODO_recall 6): `bus.subscribe(sink, redact=…)` masks what that sink receives (payload
+  and declared words), on the sink's own worker. `Tracker(redact=…)` stays the mask every sink inherits; a tracker with
+  none and a mask per subscription is how one sink receives clear text while the others never do. Breaking for a
+  custom bus: `BusPort.subscribe` takes the keyword `redact`.
+- **`HttpDriver` tells its refusals apart** (TODO_recall 7): a network error, 408, 425, 429 or 5xx is retried with the
+  doubling backoff; any other refusal is final, and a batch refused for good is sent again item by item, so one bad
+  item costs one item. What is refused in the end goes to the `refused(items, refusal)` hook (`Refusal`: status, the
+  server's reason, `final`) — a warning by default — and is no longer raised from `flush`: a subclass that overrode
+  `flush` to swallow `SinkError` can drop the override. `HttpDriver(signer=…)` takes the host's own `SignerPort`
+  (`async headers()`) instead of the configured `auth`, with no private attribute touched.
+- **Typed facts** (TODO_recall 9): `etrack.models.fact.Fact` — a business event as a `msgspec.Struct` subclass, its
+  class its schema name, `labels` the fields a metric splits by (an enum, a bool or a `Literal`: closed sets only).
+  `run.fact(value)` validates it against its class (`FactError` at the call, tracked or not) and emits one INSTANT frame
+  under what is running, with `etrack.fact` and `etrack.fact.labels` attributes. Prometheus counts each fact in
+  `fact_<name>_total` by its labels (breaking: `PrometheusAdapter.phases` gains INSTANT); OTLP names the span and the
+  log record's `event_name` after it. `dispatch_custom_event` keeps working, untyped.
+- **Cost per node and per run** (TODO_recall 10): the fold adds every closed model call's usage to each NODE and RUN
+  above it, which close with the total (`Usage` sums with `+`). `Tracker(pricer=…)` takes a `Pricer`
+  (`(ModelRef, Usage) -> float | None`) that writes `cost_usd` on each model call the source did not price; the library
+  ships no prices. Prometheus counts tokens and cost from model calls only, labelled by `node` too (breaking: the
+  series gain the label); OTLP writes a NODE's or a RUN's totals under `etrack.usage.*` and keeps the GenAI,
+  OpenInference and Langfuse usage keys on model calls, so no backend counts a call twice. Breaking for a custom sink
+  that summed every frame's usage: NODE and RUN END now carry totals.
+- **Guaranteed delivery** (TODO_recall 8): `OutboxPort` (`append`, `claim` with a lease, `ack`, `release`, `dead`,
+  `of`, `requeue`, `report`) and `SqliteAdapter`, the outbox in one SQLite file on the standard library (WAL,
+  `synchronous=FULL`). `HttpDriver(outbox=…)` stores each item under its `key` (a hook; the content's hash by default)
+  before any network call, and a relay delivers what is due: a refusal worth another attempt waits the next step of
+  `ETRACK_HTTP_SCHEDULE` (1 min, 5 min, 30 min, 2 h, 6 h; the last repeats), an item undelivered past
+  `ETRACK_HTTP_DEADLINE` (24 h) is dead with its reason, a final refusal is dead at once, `requeue` sends it again;
+  `report()` says what is sent, failed, pending and dead. `bus.subscribe(…, delivery=Delivery.GUARANTEED)` never drops
+  (its queue grows instead). Tested: 100 runs stored while the endpoint is down, the host killed with SIGKILL, 100
+  delivered after the restart, none twice. The boundary: the guarantee begins when the item is stored.
+- Docs (TODO_recall 11): [The run from inside](docs/advanced/runs.md) — the handle, declared words, annotations,
+  facts, cost; the gate and guaranteed delivery, with its boundary, in [Custom drivers](docs/advanced/drivers.md); a
+  mask per sink; [Upgrading to 0.6](docs/advanced/migration.md) — every break since 0.5.0, the settings change
+  included.
+
 ### Changed
 
 - **Settings follow the house law** (`docs/decisions.md`, 2026-11-05). One `ProviderSettings` cluster of UPPERCASE
@@ -26,6 +85,15 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 ### Removed
 
 - `etrack.infra.proxy.LazyProxy` and `etrack.ops.file.FileFinder`: they served only the lazy settings composer.
+
+### Fixed
+
+- **The LangGraph source draws what ran** (TODO_recall 2): a node's `visit` is counted per mount — one subgraph
+  mounted twice counts its nodes apart (breaking: `visit` values change for reused subgraphs); a subgraph compiled
+  under the name of its own inner node no longer hides that node (the node is the first chain of its task, read from
+  `langgraph_checkpoint_ns`); an instant frame with no coordinates (`dispatch_custom_event`) stands where its parent
+  runs (`node`, `ns`, `step`); a node's END carries where it sent the run — `goto`, the destinations of the `Command`s
+  it returned, beside the keys of their `update`.
 
 ## [0.5.0] — 2026-11-04
 

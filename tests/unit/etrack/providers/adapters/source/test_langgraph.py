@@ -1,7 +1,8 @@
 """tests/unit/etrack/providers/adapters/source/langgraph: real LangGraph runs — plain, deep agent, subgraph, interrupt."""
 
+import operator
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
 import pytest
 from deepagents import create_deep_agent
@@ -17,7 +18,7 @@ from langchain_core.runnables import RunnableConfig  # noqa: TC002
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import ParentCommand
 from langgraph.graph import END, START, MessagesState
-from langgraph.types import Command, interrupt
+from langgraph.types import Command, Send, interrupt
 
 from etrack.infra.errors import SourceError
 from etrack.models.event import EventKind, EventPhase, Failure, Part, RunEvent, RunScope, Usage
@@ -425,3 +426,81 @@ async def test_langgraph_bubble_up_not_failure(scope: RunScope) -> None:
     handler.on_chain_start({}, {}, run_id=run, name="root")
     handler.on_chain_error(ParentCommand(Command(goto="x")), run_id=run)
     assert (emitted[-1].phase, emitted[-1].payload) == (EventPhase.END, {"bubbled": "ParentCommand"})
+
+
+##### TOPOLOGY #####
+class Logged(TypedDict, total=False):
+    log: Annotated[list[str], operator.add]
+
+
+async def _probe_dispatch(state: Logged, config: RunnableConfig) -> Command[Any]:
+    await adispatch_custom_event("verdict", {"conforms": True}, config=config)
+    return Command(goto="first", update={"log": ["dispatched"]})
+
+
+def _probe_graph() -> Any:
+    """`dispatch` routes by `Command` to one subgraph mounted twice (`first`, `second`), then to `shared`: a subgraph
+    compiled under the name of its own inner node."""
+    inner = state_graph(Logged)
+    inner.add_node("work", lambda state: {"log": ["worked"]})
+    inner.add_edge(START, "work")
+    mounted = inner.compile()
+    named = state_graph(Logged)
+    named.add_node("shared", lambda state: {"log": ["shared"]})
+    named.add_edge(START, "shared")
+    graph = state_graph(Logged)
+    graph.add_node("dispatch", _probe_dispatch, destinations=("first",))
+    graph.add_node("first", mounted)
+    graph.add_node("second", mounted)
+    graph.add_node("shared", named.compile(name="shared"))
+    graph.add_edge(START, "dispatch")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", "shared")
+    graph.add_edge("shared", END)
+    return graph.compile()
+
+
+async def test_langgraph_probe_visits_per_mount(bound: Bound) -> None:
+    emitted, config = bound(LanggraphSourceAdapter())
+    await _probe_graph().ainvoke({"log": []}, config)
+    works = [event for event in by(emitted, EventKind.NODE, EventPhase.START) if event.name == "work"]
+    assert [(event.ns.split(":")[0], event.visit) for event in works] == [("first", 1), ("second", 1)]
+
+
+async def test_langgraph_probe_node_named_like_subgraph(bound: Bound) -> None:
+    emitted, config = bound(LanggraphSourceAdapter())
+    await _probe_graph().ainvoke({"log": []}, config)
+    shared = [event for event in emitted if event.kind is EventKind.NODE and event.name == "shared"]
+    ### the mounted node and its inner node, each opened and closed: the subgraph's own chain is the plumbing.
+    assert [event.phase for event in shared] == [EventPhase.START, EventPhase.START, EventPhase.END, EventPhase.END]
+    assert shared[1].parent == shared[0].id
+
+
+async def test_langgraph_probe_custom_coordinates(bound: Bound) -> None:
+    emitted, config = bound(LanggraphSourceAdapter())
+    await _probe_graph().ainvoke({"log": []}, config)
+    (custom,) = [event for event in emitted if event.kind is EventKind.CUSTOM]
+    (dispatch,) = [event for event in by(emitted, EventKind.NODE, EventPhase.START) if event.name == "dispatch"]
+    assert (custom.node, custom.ns, custom.step, custom.parent) == ("dispatch", dispatch.ns, 1, dispatch.id)
+
+
+async def test_langgraph_probe_command_route(bound: Bound) -> None:
+    emitted, config = bound(LanggraphSourceAdapter())
+    await _probe_graph().ainvoke({"log": []}, config)
+    (ended,) = [event for event in by(emitted, EventKind.NODE, EventPhase.END) if event.name == "dispatch"]
+    assert ended.payload == {"keys": ["log"], "goto": ["first"]}
+
+
+@pytest.mark.parametrize(
+    ("output", "payload"),
+    [
+        ({"b": 1, "a": 2}, {"keys": ["a", "b"]}),
+        ("plain", {"keys": []}),
+        (Command(goto=[Send("x", {}), "y"], update=[("log", ["z"])]), {"keys": ["log"], "goto": ["x", "y"]}),
+        (Command(update={"k": 1}), {"keys": ["k"], "goto": []}),
+        ([Command(goto="a"), Command(goto="b", update={"k": 1})], {"keys": ["k"], "goto": ["a", "b"]}),
+    ],
+    ids=["dict", "other", "sends", "update-only", "commands"],
+)
+async def test_langgraph_route(output: Any, payload: dict[str, Any]) -> None:
+    assert LanggraphHandler._chain_route(output) == payload

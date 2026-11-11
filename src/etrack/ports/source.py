@@ -48,6 +48,13 @@ class FoldPort(Protocol):
 
 
 @runtime_checkable
+class LocatePort(Protocol):
+    """A source that can tell which of its spans is running where the caller stands: its raw id, empty when none."""
+
+    def locate(self) -> str: ...
+
+
+@runtime_checkable
 class SourcePort[C](Provider, Protocol):
     """A framework's run hooked to a fold: the host's config in, the same config with the hook and the run id out."""
 

@@ -10,6 +10,7 @@ sections (`model`, `usage`, `error`) and the open `attributes` bag, namespaced b
 project that needs more subclasses `RunEvent` and hands the subclass to the channel. A client never reads the record
 whole: it declares an `EventView` with the fields it needs and `project` narrows any event onto it."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum, auto
 from typing import Any, Final, Self
@@ -17,6 +18,9 @@ from typing import Any, Final, Self
 import msgspec
 
 VERSION: Final[int] = 1
+
+### the project's mask over what a frame carried: a payload in, the payload a sink may see out.
+type Redact = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 ##### AXES #####
@@ -61,9 +65,18 @@ class Part(StrEnum):
     CUSTOM = auto()
 
 
+class Outcome(StrEnum):
+    """How a run ended: it ran to its end, it stopped to ask (an interrupt, resumed by a later run), or it failed."""
+
+    COMPLETED = auto()
+    INTERRUPTED = auto()
+    FAILED = auto()
+
+
 ##### SECTIONS #####
 class Usage(msgspec.Struct, frozen=True, kw_only=True):
-    """Tokens a model call spent, by kind, and its cost when the source knows it."""
+    """Tokens a model call spent, by kind, and its cost when known; on a NODE's or a RUN's END, the total of every model
+    call that ran under it."""
 
     input_tokens: int = 0
     output_tokens: int = 0
@@ -73,6 +86,19 @@ class Usage(msgspec.Struct, frozen=True, kw_only=True):
     cache_write_tokens: int = 0
     cost_usd: float | None = None
 
+    def __add__(self, other: Usage) -> Usage:
+        """Two spends as one: every count summed, the cost summed over what is known — unknown when neither is."""
+        costs = [cost for cost in (self.cost_usd, other.cost_usd) if cost is not None]
+        return Usage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            total_tokens=self.total_tokens + other.total_tokens,
+            reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+            cost_usd=sum(costs) if costs else None,
+        )
+
 
 class ModelRef(msgspec.Struct, frozen=True, kw_only=True):
     """Which model served a call: the provider, the model's name, and the request parameters worth keeping."""
@@ -80,6 +106,11 @@ class ModelRef(msgspec.Struct, frozen=True, kw_only=True):
     provider: str = ""
     name: str = ""
     params: dict[str, Any] = msgspec.field(default_factory=dict)
+
+
+### the project's prices: what a model call cost in US dollars, or `None` when the model is not priced. The library
+### ships no prices — they age faster than releases.
+type Pricer = Callable[[ModelRef, Usage], float | None]
 
 
 class Failure(msgspec.Struct, frozen=True, kw_only=True):
@@ -112,7 +143,10 @@ class RunEvent(EventView, frozen=True, kw_only=True):
 
     `node`, `ns` and `step` are the graph coordinates when the source has a graph (the node a span runs under, its
     subgraph path, the superstep); `visit` counts how many times the run has entered that node. `message_id` and
-    `call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR."""
+    `call_id` tie a frame to the chat message or the tool call a client renders. `latency_ms` is set on END and ERROR.
+
+    The run's root closes with what the run declared — `input`, what entered, and `output`, what it published, each set
+    by the code that said it (`run.declare`), never inferred — and its `outcome`; no declaration, no field."""
 
     v: int = VERSION
     run_id: str
@@ -135,6 +169,9 @@ class RunEvent(EventView, frozen=True, kw_only=True):
     model: ModelRef | None = None
     usage: Usage | None = None
     error: Failure | None = None
+    input: str | None = None
+    output: str | None = None
+    outcome: Outcome | None = None
     payload: dict[str, Any] = msgspec.field(default_factory=dict)
     attributes: dict[str, Any] = msgspec.field(default_factory=dict)
 
@@ -147,6 +184,15 @@ class RunEvent(EventView, frozen=True, kw_only=True):
     def dedupe_key(self) -> str:
         """What makes a frame unique across redeliveries: its run, its span and the edge of the span it marks."""
         return f"{self.run_id}:{self.id}:{self.phase}:{self.seq}"
+
+    def masked(self, redact: Redact) -> Self:
+        """The frame as a mask lets it through: its payload, and the run's declared words, each passed through `redact`;
+        a declared word the mask drops is gone."""
+        declared = {key: text for key, text in (("input", self.input), ("output", self.output)) if text is not None}
+        said = redact(declared) if declared else {}
+        return msgspec.structs.replace(
+            self, payload=redact(self.payload), input=said.get("input"), output=said.get("output")
+        )
 
 
 class LogView(EventView, frozen=True, kw_only=True):
@@ -166,3 +212,29 @@ class LogView(EventView, frozen=True, kw_only=True):
     latency_ms: float | None = None
     usage: Usage | None = None
     error: Failure | None = None
+
+
+class RunView(EventView, frozen=True, kw_only=True):
+    """A run as its root closes it: whose, when, how long, what it took in and published, how it ended, what it carries.
+
+    What a run-level consumer reads — one item per run, written when `ended` — with the host's attributes lifted onto
+    the root (`app.*`) and the ones annotated on the way."""
+
+    run_id: str
+    thread_id: str = ""
+    parent: str = ""
+    kind: EventKind
+    phase: EventPhase
+    at: datetime
+    latency_ms: float | None = None
+    usage: Usage | None = None
+    error: Failure | None = None
+    input: str | None = None
+    output: str | None = None
+    outcome: Outcome | None = None
+    attributes: dict[str, Any] = msgspec.field(default_factory=dict)
+
+    @property
+    def ended(self) -> bool:
+        """Whether this frame closes the run: its root's END or ERROR."""
+        return self.kind is EventKind.RUN and self.parent == "" and self.phase in {EventPhase.END, EventPhase.ERROR}
