@@ -195,3 +195,32 @@ async def test_fold_declared_masked(scope: RunScope, edge: Callable[..., Edge]) 
     fold.declare(input="secreto", output="se va")
     fold.close("r", {})
     assert (emitted[0].payload, emitted[-1].input, emitted[-1].output) == ({"a": "***"}, "***", None)
+
+
+##### ATTRIBUTES #####
+async def test_fold_annotated_on_root_end(
+    fold: FoldProcessor, emitted: list[RunEvent], edge: Callable[..., Edge]
+) -> None:
+    fold.open(edge("r", kind=EventKind.RUN, attributes={"app.owner": "u1"}))
+    fold.open(edge("n", "r"))
+    fold.annotate(**{"app.cut": True})
+    fold.close("n", {})
+    fold.close("r", {})
+    node, run = emitted[-2:]
+    assert node.attributes == {}
+    assert run.attributes == {"app.owner": "u1", "app.cut": True}
+
+
+async def test_fold_propagates_root(scope: RunScope, edge: Callable[..., Edge]) -> None:
+    emitted: list[RunEvent] = []
+    fold = FoldProcessor(scope, emitted.append, propagate=True)
+    fold.open(edge("r", kind=EventKind.RUN, attributes={"app.owner": "u1"}))
+    fold.open(edge("n", "r", attributes={"own": 1}))
+    fold.instant(edge("i", "n", kind=EventKind.CUSTOM))
+    fold.close("n", {})
+    assert [event.attributes for event in emitted] == [
+        {"app.owner": "u1"},
+        {"app.owner": "u1", "own": 1},
+        {"app.owner": "u1"},
+        {"app.owner": "u1", "own": 1},
+    ]

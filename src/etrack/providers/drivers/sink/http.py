@@ -9,7 +9,9 @@ A custom driver subclasses it and overrides what it must, nothing else:
 
 - `view` — the fields it reads (the bus narrows every event onto it before `send`);
 - `phases` — the phases it wants (the bus skips the rest before queueing);
-- `accept(view)` — whether this event is sent at all;
+- `accept(view)` — whether this event is sent at all — the project's gate: it fails closed, an `accept` that reads a
+  key the event does not carry (`view.attributes["app.owner"]`) refuses the event and counts it (`missing`), so a
+  missing fact never passes as a default;
 - `encode(view)` — the item the event becomes (a `msgspec.Struct`, a dict, anything msgspec encodes);
 - `body(items)` — the request body and its content type, when the endpoint wants a shape of its own."""
 
@@ -62,7 +64,7 @@ class HttpDriver:
     view: ClassVar[type[EventView]] = RunEvent
     phases: ClassVar[frozenset[EventPhase]] = PHASES
 
-    __slots__ = ("_batch", "_client", "_conf", "_failed", "_lock", "_sent", "_signer", "_ticker")
+    __slots__ = ("_batch", "_client", "_conf", "_failed", "_lock", "_missing", "_sent", "_signer", "_ticker")
 
     def __init__(self, **given: Unpack[HttpConfig]) -> None:
         """Keyword arguments as `HttpConfig` names them; what is not given, ETRACK_HTTP_* fills (`infra/defaults`)."""
@@ -74,6 +76,7 @@ class HttpDriver:
         self._ticker: asyncio.Task[None] | None = None
         self._sent = 0
         self._failed = 0
+        self._missing = 0
 
     ##### PRIVATE #####
 
@@ -119,6 +122,14 @@ class HttpDriver:
                     f"{self.spec.name}: {config['endpoint']} refused the batch after {attempt + 1} attempts — {reason}"
                 )
                 raise SinkError(msg)
+
+    def _send_accept(self, view: EventView) -> bool:
+        try:
+            return self.accept(view)
+        except KeyError as missing:
+            self._missing += 1
+            logger.warning("http refused an event", sink=self.spec.name, missing=str(missing))
+            return False
 
     ############################################################
 
@@ -168,7 +179,7 @@ class HttpDriver:
     async def send(self, view: EventView) -> None:
         """Add the event to the batch; a full batch leaves at once."""
         self._common_client()
-        _ = self.accept(view) and self._batch.append(self.encode(view))
+        _ = self._send_accept(view) and self._batch.append(self.encode(view))
         _ = len(self._batch) >= self._conf["batch"] and await self.flush()
 
     async def flush(self) -> int:
@@ -197,3 +208,8 @@ class HttpDriver:
     def failed(self) -> int:
         """Events dropped with a refused batch."""
         return self._failed
+
+    @property
+    def missing(self) -> int:
+        """Events refused because `accept` read a key they did not carry."""
+        return self._missing

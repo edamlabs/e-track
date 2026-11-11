@@ -193,3 +193,29 @@ class LogView(EventView, frozen=True, kw_only=True):
     latency_ms: float | None = None
     usage: Usage | None = None
     error: Failure | None = None
+
+
+class RunView(EventView, frozen=True, kw_only=True):
+    """A run as its root closes it: whose, when, how long, what it took in and published, how it ended, what it carries.
+
+    What a run-level consumer reads — one item per run, written when `ended` — with the host's attributes lifted onto
+    the root (`app.*`) and the ones annotated on the way."""
+
+    run_id: str
+    thread_id: str = ""
+    parent: str = ""
+    kind: EventKind
+    phase: EventPhase
+    at: datetime
+    latency_ms: float | None = None
+    usage: Usage | None = None
+    error: Failure | None = None
+    input: str | None = None
+    output: str | None = None
+    outcome: Outcome | None = None
+    attributes: dict[str, Any] = msgspec.field(default_factory=dict)
+
+    @property
+    def ended(self) -> bool:
+        """Whether this frame closes the run: its root's END or ERROR."""
+        return self.kind is EventKind.RUN and self.parent == "" and self.phase in {EventPhase.END, EventPhase.ERROR}

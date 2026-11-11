@@ -17,6 +17,13 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   came last. OTLP writes them as `input.value`/`output.value`, `gen_ai.input.messages`/`gen_ai.output.messages` and
   `etrack.outcome`. The record only grows (`VERSION` stays 1); a project's `redact` masks the declared words too
   (`RunEvent.masked`), and `Redact` moves to `etrack.models.event`.
+- **Run attributes and a gate that fails closed** (TODO_recall 5): `run.annotate(**attributes)` adds what the run
+  learnt on its way to its root's END; `Tracker(propagate=True)` puts the root's attributes (the host's `app.*`) on
+  every frame. `RunView` (`etrack.models.event`) reads a run as its root closes it — declared words, outcome,
+  attributes — and `ended` says when a frame is that close. `HttpDriver`'s `accept` is the project's gate and fails
+  closed: one that reads a key the event does not carry refuses the event and counts it (`missing`). The library holds
+  no rule; the plan's `RunSink` base is this view and this gate (a driver may not subclass another driver: the tree's
+  layers).
 
 ### Fixed
 

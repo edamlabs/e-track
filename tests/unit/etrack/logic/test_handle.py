@@ -137,3 +137,21 @@ async def test_handle_interrupted_outcome(collector: Collector) -> None:
         await compiled.ainvoke({"messages": []}, {**tracked.config, "configurable": {"thread_id": "t1"}})
     (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
     assert ended.outcome is Outcome.INTERRUPTED
+
+
+##### ATTRIBUTES #####
+async def test_handle_annotated_on_end(collector: Collector) -> None:
+    async def judge(state: MessagesState) -> dict[str, Any]:
+        run.annotate(**{"app.cut": False})
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("judge", judge)
+    graph.add_edge(START, "judge")
+    tracker = Tracker(EventChannel(collector), LanggraphSourceAdapter(), propagate=True)
+    with tracker.track("t1", {"metadata": {"app.owner": "u1"}}) as tracked:
+        await graph.compile().ainvoke({"messages": []}, tracked.config)
+    run.annotate(nobody="hears")
+    (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
+    assert ended.attributes == {"app.owner": "u1", "app.cut": False}
+    assert all(event.attributes["app.owner"] == "u1" for event in collector.events)

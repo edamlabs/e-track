@@ -1,4 +1,4 @@
-"""logic/handle: RunHandle — the run in progress, reached from anywhere inside it: span, fact, annotate, declare.
+"""logic/handle: RunHandle — the run in progress, reached from anywhere inside it: span, declare, annotate.
 
 `Tracker.track` binds the run's fold in a context variable for its block; LangGraph runs its nodes, tools and
 middlewares in copies of the caller's context, so the code the run calls reaches the fold without being handed it. A
@@ -58,6 +58,14 @@ class RunHandle:
         match RUNNING.get():
             case Running(fold=fold):
                 fold.declare(input=input, output=output)
+            case _:
+                pass
+
+    def annotate(self, **attributes: Any) -> None:
+        """Attributes the run learnt on its way — a verdict, a cut, a consent —, carried by the run's END."""
+        match RUNNING.get():
+            case Running(fold=fold):
+                fold.annotate(**attributes)
             case _:
                 pass
 

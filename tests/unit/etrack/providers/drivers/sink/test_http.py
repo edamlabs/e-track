@@ -2,7 +2,7 @@
 
 import json
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from pydantic import SecretStr
@@ -11,14 +11,14 @@ from structlog.testing import capture_logs
 from etrack.infra.config.auth import BearerAuth
 from etrack.infra.config.providers import Encoding
 from etrack.infra.errors import SinkError
-from etrack.models.event import EventKind, EventPhase
+from etrack.models.event import EventKind, EventPhase, Outcome, RunView
 from etrack.ports.sink import SinkPort
 from etrack.providers.drivers.sink.http import HttpDriver
 from support.endpoint import fake_endpoint
 from support.port import free_port
 from support.recall import Recall, RecallDriver
 from support.wait import eventually
-from unit.etrack.conftest import frame
+from unit.etrack.conftest import RUN, frame
 
 if TYPE_CHECKING:
     from pytest_httpserver import HTTPServer
@@ -121,3 +121,71 @@ async def test_http_subclass_hooks(settings: Configure, httpserver: HTTPServer) 
             Recall.project(frame(1, EventPhase.END, kind=EventKind.RETRIEVAL, name="poliza", payload={"hits": ["a"]}))
         )
     assert json.loads(endpoint.bodies[0]) == {"recalls": [{"run": frame().run_id, "query": "poliza", "hits": ["a"]}]}
+
+
+##### GATE #####
+class ConsentedDriver(HttpDriver):
+    """Runs whose customer consented and is known, and that completed."""
+
+    view = RunView
+    phases = frozenset({EventPhase.END, EventPhase.ERROR})
+
+    def accept(self, view: Any) -> bool:
+        run = RunView.project(view)
+        consented = run.ended and run.attributes["app.consent"] and run.attributes["app.known"]
+        return bool(consented) and run.outcome is Outcome.COMPLETED
+
+    def encode(self, view: Any) -> Any:
+        run = RunView.project(view)
+        return {"turn": run.run_id, "user": run.input, "assistant": run.output}
+
+
+def _ended(**attributes: Any) -> Any:
+    return frame(
+        9,
+        EventPhase.END,
+        id=RUN,
+        kind=EventKind.RUN,
+        input="hola",
+        output="buenas",
+        outcome=Outcome.COMPLETED,
+        attributes=attributes,
+    )
+
+
+@pytest.mark.parametrize(
+    ("attributes", "sent", "missing"),
+    [
+        ({"app.consent": True, "app.known": True}, 1, 0),
+        ({"app.consent": False, "app.known": True}, 0, 0),
+        ({"app.consent": True, "app.known": False}, 0, 0),
+        ({"app.consent": True}, 0, 1),
+        ({}, 0, 1),
+    ],
+    ids=["both", "no-consent", "unknown", "known-absent", "none"],
+)
+async def test_http_gate_fails_closed(
+    attributes: dict[str, Any], sent: int, missing: int, *, settings: Configure, httpserver: HTTPServer
+) -> None:
+    endpoint = fake_endpoint(httpserver)
+    async with ConsentedDriver(**settings(endpoint.url)) as driver:
+        await driver.send(_ended(**attributes))
+    assert (driver.sent, driver.missing) == (sent, missing)
+    assert [json.loads(body) for body in endpoint.bodies] == [
+        {"turn": RUN, "user": "hola", "assistant": "buenas"}
+    ] * sent
+
+
+@pytest.mark.parametrize(
+    ("fields", "ended"),
+    [
+        ({"kind": EventKind.RUN, "phase": EventPhase.END}, True),
+        ({"kind": EventKind.RUN, "phase": EventPhase.ERROR}, True),
+        ({"kind": EventKind.RUN, "phase": EventPhase.START}, False),
+        ({"kind": EventKind.RUN, "phase": EventPhase.END, "parent": "up"}, False),
+        ({"kind": EventKind.NODE, "phase": EventPhase.END}, False),
+    ],
+    ids=["end", "error", "start", "nested", "node"],
+)
+async def test_http_run_view_ended(fields: dict[str, Any], ended: bool) -> None:
+    assert RunView.project(frame(**fields)).ended is ended

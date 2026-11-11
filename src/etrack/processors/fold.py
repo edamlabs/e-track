@@ -4,8 +4,9 @@ A source reports every span it sees; the fold keeps the ones a person reads (an 
 plumbing (`kind=None`) into its nearest kept ancestor, so a frame's `parent` is always a span that was itself emitted.
 It stamps what the source cannot know: the run's ids, `seq`, the `visit` count of each node, the latency of a closed
 span, and the payload passed through the project's `redact`. The run's root closes with what the run declared (`declare`:
-what entered, what it published) and how it ended — failed, interrupted (an interrupt was folded) or completed. One
-fold per run; `emit` is whoever takes the frames."""
+what entered, what it published), the attributes it was annotated with, and how it ended — failed, interrupted (an
+interrupt was folded) or completed. With `propagate`, every frame carries the root's attributes (the host's `app.*`).
+One fold per run; `emit` is whoever takes the frames."""
 
 import itertools
 import time
@@ -40,10 +41,13 @@ class FoldProcessor:
     """One run's edges as frames, pushed to `emit` the moment they are folded."""
 
     __slots__ = (
+        "_annotated",
+        "_carried",
         "_declared",
         "_emit",
         "_interrupted",
         "_open",
+        "_propagate",
         "_redact",
         "_root",
         "_scope",
@@ -52,8 +56,9 @@ class FoldProcessor:
         "_visits",
     )
 
-    def __init__(self, scope: RunScope, emit: Emit, redact: Redact | None = None) -> None:
+    def __init__(self, scope: RunScope, emit: Emit, redact: Redact | None = None, *, propagate: bool = False) -> None:
         self._scope = scope
+        self._propagate = propagate
         self._emit = emit
         self._redact = redact
         self._seq = itertools.count()
@@ -64,6 +69,9 @@ class FoldProcessor:
         self._visits: Counter[tuple[str, str]] = Counter()
         self._declared: dict[str, str] = {}
         self._interrupted = False
+        ### the root's attributes every frame carries when propagating; what the run annotated, for its END.
+        self._carried: dict[str, Any] = {}
+        self._annotated: dict[str, Any] = {}
 
     ##### PRIVATE #####
 
@@ -106,16 +114,25 @@ class FoldProcessor:
             call_id=fields.pop("call_id", "") or edge.call_id,
             model=edge.model,
             payload=payload,
-            attributes=edge.attributes,
+            attributes={**self._carried, **edge.attributes, **fields.pop("attributes", {})},
             **fields,
         )
         self._emit(event if self._redact is None else event.masked(self._redact))
+
+    def _open_root(self, edge: Edge) -> None:
+        ### the first kept span is the run's root: what it carries, every frame carries when propagating.
+        match self._root:
+            case "":
+                self._root = edge.id
+                self._carried = dict(edge.attributes) if self._propagate else {}
+            case _:
+                pass
 
     def _close_run(self, span: str, error: Failure | None) -> dict[str, Any]:
         ### only the root states what the run declared and how it ended.
         match span == self._root:
             case True:
-                return {**self._declared, "outcome": self._close_outcome(error)}
+                return {**self._declared, "outcome": self._close_outcome(error), "attributes": self._annotated}
             case _:
                 return {}
 
@@ -149,7 +166,7 @@ class FoldProcessor:
             case None:
                 self._spans[edge.id] = parent
             case _:
-                self._root = self._root or edge.id
+                self._open_root(edge)
                 span = OpenSpan(edge=edge, parent=parent, visit=self._common_visit(edge), began=time.perf_counter())
                 self._spans[edge.id] = edge.id
                 self._open[edge.id] = span
@@ -194,6 +211,10 @@ class FoldProcessor:
         them. A word given again replaces the last; a word never given stays absent."""
         given = {key: text for key, text in (("input", input), ("output", output)) if text is not None}
         self._declared.update(given)
+
+    def annotate(self, **attributes: Any) -> None:
+        """Attributes learnt during the run — a verdict, a cut, a consent read late —, carried by the run's END."""
+        self._annotated.update(attributes)
 
     @contextmanager
     def span(
