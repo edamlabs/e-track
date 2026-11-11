@@ -267,3 +267,16 @@ async def test_otlp_run_declared(spans: InMemorySpanExporter, root: str) -> None
     ]
     assert json.loads(attributes["gen_ai.input.messages"])[0]["role"] == "user"
     assert attributes["etrack.outcome"] == "completed"
+
+
+async def test_otlp_fact_named(spans: InMemorySpanExporter, logs: InMemoryLogRecordExporter, root: str) -> None:
+    fact = {"etrack.fact": "BoundaryCrossed", "etrack.fact.labels": ["area"]}
+    async with OtlpDriver(span_exporters=[spans], log_exporters=[logs]) as driver:
+        await driver.send(frame(0, EventPhase.START, id=root, kind=EventKind.RUN, name="run"))
+        await driver.send(
+            frame(1, EventPhase.INSTANT, parent=root, kind=EventKind.CUSTOM, name="BoundaryCrossed", attributes=fact)
+        )
+        assert await driver.flush()
+    assert "BoundaryCrossed" in [span.name for span in spans.get_finished_spans()]
+    records = [data.log_record for data in logs.get_finished_logs()]
+    assert [record.event_name for record in records] == ["etrack.run.start", "BoundaryCrossed"]

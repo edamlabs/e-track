@@ -34,6 +34,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   server's reason, `final`) — a warning by default — and is no longer raised from `flush`: a subclass that overrode
   `flush` to swallow `SinkError` can drop the override. `HttpDriver(signer=…)` takes the host's own `SignerPort`
   (`async headers()`) instead of the configured `auth`, with no private attribute touched.
+- **Typed facts** (TODO_recall 9): `etrack.models.fact.Fact` — a business event as a `msgspec.Struct` subclass, its
+  class its schema name, `labels` the fields a metric splits by (an enum, a bool or a `Literal`: closed sets only).
+  `run.fact(value)` validates it against its class (`FactError` at the call, tracked or not) and emits one INSTANT frame
+  under what is running, with `etrack.fact` and `etrack.fact.labels` attributes. Prometheus counts each fact in
+  `fact_<name>_total` by its labels (breaking: `PrometheusAdapter.phases` gains INSTANT); OTLP names the span and the
+  log record's `event_name` after it. `dispatch_custom_event` keeps working, untyped.
 
 ### Fixed
 

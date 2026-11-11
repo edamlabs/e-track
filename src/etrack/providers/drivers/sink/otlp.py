@@ -33,6 +33,7 @@ from etrack.infra.auth import AuthSigner
 from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
 from etrack.models.event import EventKind, EventPhase, EventView, Failure, ModelRef, Outcome, Part, Usage
+from etrack.models.fact import FACT
 from etrack.ops.w3c import w3c_span, w3c_trace
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
@@ -418,7 +419,7 @@ class OtlpDriver:
                         severity_number=SEVERITIES[view.phase],
                         severity_text=str(view.phase),
                         body=view.name or str(view.kind),
-                        event_name=f"etrack.{view.kind}.{view.phase}",
+                        event_name=view.attributes.get(FACT) or f"etrack.{view.kind}.{view.phase}",
                         attributes=self._send_attributes(view),
                     )
                 )

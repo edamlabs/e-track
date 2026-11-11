@@ -1,16 +1,20 @@
 """tests/unit/etrack/logic/handle: RunHandle — the run reached from inside a node, a no-op outside, never crossed."""
 
 import asyncio
-from typing import Any
+from enum import StrEnum, auto
+from typing import Any, ClassVar
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState
 from langgraph.types import interrupt
 
+from etrack.infra.errors import FactError
 from etrack.logic.api import Tracker
 from etrack.logic.channel import EventChannel
 from etrack.logic.handle import run
 from etrack.models.event import EventKind, EventPhase, Outcome
+from etrack.models.fact import Fact
 from etrack.providers.adapters.source.langgraph import LanggraphSourceAdapter
 from support.events import by
 from support.graph import state_graph
@@ -155,3 +159,53 @@ async def test_handle_annotated_on_end(collector: Collector) -> None:
     (ended,) = by(collector.events, EventKind.RUN, EventPhase.END)
     assert ended.attributes == {"app.owner": "u1", "app.cut": False}
     assert all(event.attributes["app.owner"] == "u1" for event in collector.events)
+
+
+##### FACTS #####
+class Area(StrEnum):
+    AUTO = auto()
+    HOME = auto()
+
+
+class Crossed(Fact, frozen=True, kw_only=True):
+    labels: ClassVar[frozenset[str]] = frozenset({"area"})
+    area: Area
+    turn: int
+
+
+class Loose(Fact, frozen=True, kw_only=True):
+    labels: ClassVar[frozenset[str]] = frozenset({"turn"})
+    turn: int
+
+
+async def test_handle_fact_twice(collector: Collector) -> None:
+    async def route(state: MessagesState) -> dict[str, Any]:
+        run.fact(Crossed(area=Area.AUTO, turn=1))
+        run.fact(Crossed(area=Area.AUTO, turn=2))
+        return {}
+
+    graph = state_graph(MessagesState)
+    graph.add_node("route", route)
+    graph.add_edge(START, "route")
+    with Tracker(EventChannel(collector), LanggraphSourceAdapter()).track("t1", {}) as tracked:
+        await graph.compile().ainvoke({"messages": []}, tracked.config)
+    (node,) = by(collector.events, EventKind.NODE, EventPhase.START)
+    facts = [event for event in collector.events if event.phase is EventPhase.INSTANT]
+    assert [(fact.name, fact.parent, fact.node, fact.step) for fact in facts] == [("Crossed", node.id, "route", 1)] * 2
+    assert [fact.payload for fact in facts] == [{"area": "auto", "turn": 1}, {"area": "auto", "turn": 2}]
+    assert facts[0].attributes == {"etrack.fact": "Crossed", "etrack.fact.labels": ["area"]}
+
+
+async def test_handle_fact_outside_run() -> None:
+    run.fact(Crossed(area=Area.HOME, turn=1))
+
+
+@pytest.mark.parametrize(
+    ("value", "match"),
+    [(Crossed(area=Area.AUTO, turn="1"), r"Expected `int`"), (Loose(turn=1), r"labels \['turn'\]")],  # ty: ignore[invalid-argument-type]
+    ids=["wrong-type", "open-label"],
+)
+async def test_handle_fact_refused(value: Fact, match: str) -> None:
+    ### refused at the call, tracked or not.
+    with pytest.raises(FactError, match=match):
+        run.fact(value)

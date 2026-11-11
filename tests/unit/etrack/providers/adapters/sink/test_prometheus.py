@@ -45,3 +45,20 @@ async def test_prometheus_counts_times_and_prices() -> None:
             scraped = (await client.get("/")).text
     assert 't_spans_total{kind="llm",name="gemini",status="ok"} 1.0' in scraped
     assert not await metrics.health()
+
+
+async def test_prometheus_counts_facts() -> None:
+    labelled = {"etrack.fact": "BoundaryCrossed", "etrack.fact.labels": ["area"]}
+    bare = {"etrack.fact": "Handed", "etrack.fact.labels": []}
+    async with PrometheusAdapter(**PrometheusConfig(namespace="t")) as metrics:
+        _ = [
+            await metrics.send(frame(seq, EventPhase.INSTANT, payload={"area": "auto"}, attributes=labelled))
+            for seq in range(2)
+        ]
+        await metrics.send(frame(2, EventPhase.INSTANT, payload={"area": "home"}, attributes=labelled))
+        await metrics.send(frame(3, EventPhase.INSTANT, attributes=bare))
+        await metrics.send(frame(4, EventPhase.INSTANT, kind=EventKind.INTERRUPT))
+    read = metrics.registry.get_sample_value
+    assert read("t_fact_boundary_crossed_total", {"area": "auto"}) == 2
+    assert read("t_fact_boundary_crossed_total", {"area": "home"}) == 1
+    assert read("t_fact_handed_total") == 1
