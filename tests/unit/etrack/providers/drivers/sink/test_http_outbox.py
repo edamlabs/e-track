@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-import signal
 import subprocess
 import sys
 from datetime import timedelta
@@ -134,9 +133,10 @@ async def test_outbox_killed_host_loses_nothing(tmp_path: Path, httpserver: HTTP
     assert host.stdout is not None
     ### the host's log shares its stdout: read until it says everything is stored.
     async with asyncio.timeout(30):
-        while await host.stdout.readline() != b"stored\n":
+        while (await host.stdout.readline()).strip() != b"stored":
             pass
-    host.send_signal(signal.SIGKILL)
+    ### SIGKILL on POSIX, TerminateProcess on Windows: the host gets no chance to close anything.
+    host.kill()
     await host.wait()
     endpoint = fake_endpoint(httpserver)
     async with SqliteAdapter(db) as outbox, TurnDriver(outbox=outbox, **fast(endpoint.url)) as driver:
