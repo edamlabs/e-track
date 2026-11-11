@@ -38,6 +38,10 @@ def http(**given: Unpack[HttpConfig]) -> HttpConfig:
         "retries": st.ETRACK_HTTP_RETRIES,
         "backoff": st.ETRACK_HTTP_BACKOFF,
         "kinds": st.ETRACK_HTTP_KINDS,
+        "schedule": st.ETRACK_HTTP_SCHEDULE,
+        "deadline": st.ETRACK_HTTP_DEADLINE,
+        "lease": st.ETRACK_HTTP_LEASE,
+        "poll": st.ETRACK_HTTP_POLL,
     }
     return HTTP.validate_python(read | given)
 

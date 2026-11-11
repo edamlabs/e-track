@@ -16,6 +16,7 @@ from etrack.infra.config.base import BaseSettings
 
 ##### TYPES #####
 Port = Annotated[int, Field(ge=1, le=65535)]
+Schedule = Annotated[tuple[timedelta, ...], Field(min_length=1)]
 
 
 class Encoding(StrEnum):
@@ -51,6 +52,10 @@ class HttpConfig(TypedDict, total=False):
     retries: NonNegativeInt
     backoff: timedelta
     kinds: frozenset[str]
+    schedule: Schedule
+    deadline: timedelta
+    lease: timedelta
+    poll: timedelta
 
 
 class OtlpConfig(TypedDict, total=False):
@@ -125,6 +130,18 @@ class ProviderSettings(BaseSettings):
     ETRACK_HTTP_BACKOFF: timedelta = timedelta(milliseconds=500)
     ### kind names (`llm`, `retrieval`…) sent; empty: every kind — config never imports the record.
     ETRACK_HTTP_KINDS: frozenset[str] = frozenset()
+    ### with an outbox: the wait before each new attempt (the last repeats), how long an item is tried before it is
+    ### dead, how long a claim is held, how often the relay looks for what is due.
+    ETRACK_HTTP_SCHEDULE: Schedule = (
+        timedelta(minutes=1),
+        timedelta(minutes=5),
+        timedelta(minutes=30),
+        timedelta(hours=2),
+        timedelta(hours=6),
+    )
+    ETRACK_HTTP_DEADLINE: timedelta = timedelta(hours=24)
+    ETRACK_HTTP_LEASE: timedelta = timedelta(minutes=5)
+    ETRACK_HTTP_POLL: timedelta = timedelta(seconds=1)
 
     ### OTLP
     ### collectors by name as JSON (`{"langfuse": {"endpoint": …, "headers": {…}}}`); none: spans minted, never exported.

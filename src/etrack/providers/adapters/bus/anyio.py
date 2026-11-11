@@ -2,7 +2,7 @@
 
 `publish` is synchronous and returns at once: on the loop's thread it queues the event on every sink that takes its
 phase; from any other thread it hops onto the loop first. A full stream drops the event for that sink alone and counts
-it. Each worker masks the event with the subscription's `Redact`, applies its `Select`, narrows the event onto the sink's view and awaits `send`; a
+it — unless the subscription is `GUARANTEED`, whose stream is unbounded and never drops. Each worker masks the event with the subscription's `Redact`, applies its `Select`, narrows the event onto the sink's view and awaits `send`; a
 select or a sink that raises is logged and skipped, never the producer's problem nor another sink's. Leaving the bus
 closes every stream, lets each worker deliver what is still queued, then stops.
 
@@ -25,6 +25,7 @@ from etrack.infra import defaults
 from etrack.infra.errors import BusError
 from etrack.infra.logger import logger
 from etrack.models.event import RunEvent
+from etrack.ports.bus import Delivery
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
 if TYPE_CHECKING:
@@ -179,12 +180,20 @@ class AnyioAdapter:
         """Open: the supervisor still runs its workers and publish is accepted."""
         return self._supervisor is not None and not self._supervisor.done()
 
-    def subscribe(self, sink: SinkPort, select: Select | None = None, *, redact: Redact | None = None) -> None:
-        """A sink served from now on, masked by `redact` and through `select` when given; named by its spec, numbered
-        when repeated."""
+    def subscribe(
+        self,
+        sink: SinkPort,
+        select: Select | None = None,
+        *,
+        redact: Redact | None = None,
+        delivery: Delivery = Delivery.BEST_EFFORT,
+    ) -> None:
+        """A sink served from now on, masked by `redact` and through `select` when given, its queue bounded unless
+        `delivery` is guaranteed; named by its spec, numbered when repeated."""
         taken = sum(sub.sink.spec.name == sink.spec.name for sub in self._subs)
         name = sink.spec.name if taken == 0 else f"{sink.spec.name}#{taken}"
-        send, receive = anyio.create_memory_object_stream[RunEvent](self._common_capacity)
+        capacity = math.inf if delivery is Delivery.GUARANTEED else self._common_capacity
+        send, receive = anyio.create_memory_object_stream[RunEvent](capacity)
         sub = Subscription(name=name, sink=sink, select=select, redact=redact, send=send, receive=receive)
         self._subs.append(sub)
         self._subscribe_start(sub)

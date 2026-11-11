@@ -47,6 +47,15 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   series gain the label); OTLP writes a NODE's or a RUN's totals under `etrack.usage.*` and keeps the GenAI,
   OpenInference and Langfuse usage keys on model calls, so no backend counts a call twice. Breaking for a custom sink
   that summed every frame's usage: NODE and RUN END now carry totals.
+- **Guaranteed delivery** (TODO_recall 8): `OutboxPort` (`append`, `claim` with a lease, `ack`, `release`, `dead`,
+  `of`, `requeue`, `report`) and `SqliteAdapter`, the outbox in one SQLite file on the standard library (WAL,
+  `synchronous=FULL`). `HttpDriver(outbox=…)` stores each item under its `key` (a hook; the content's hash by default)
+  before any network call, and a relay delivers what is due: a refusal worth another attempt waits the next step of
+  `ETRACK_HTTP_SCHEDULE` (1 min, 5 min, 30 min, 2 h, 6 h; the last repeats), an item undelivered past
+  `ETRACK_HTTP_DEADLINE` (24 h) is dead with its reason, a final refusal is dead at once, `requeue` sends it again;
+  `report()` says what is sent, failed, pending and dead. `bus.subscribe(…, delivery=Delivery.GUARANTEED)` never drops
+  (its queue grows instead). Tested: 100 runs stored while the endpoint is down, the host killed with SIGKILL, 100
+  delivered after the restart, none twice. The boundary: the guarantee begins when the item is stored.
 
 ### Fixed
 

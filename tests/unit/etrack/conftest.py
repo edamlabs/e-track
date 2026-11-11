@@ -12,6 +12,7 @@ import msgspec
 import pytest
 
 from etrack.models.event import EventKind, EventPhase, EventView, RunEvent
+from etrack.ports.bus import Delivery
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
 
 if TYPE_CHECKING:
@@ -44,7 +45,14 @@ class Collector:
     def publish(self, event: RunEvent) -> None:
         self.events.append(event)
 
-    def subscribe(self, sink: SinkPort, select: Select | None = None, *, redact: Redact | None = None) -> None:
+    def subscribe(
+        self,
+        sink: SinkPort,
+        select: Select | None = None,
+        *,
+        redact: Redact | None = None,
+        delivery: Delivery = Delivery.BEST_EFFORT,
+    ) -> None:
         return None
 
     @property
