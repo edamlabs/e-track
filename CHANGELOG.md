@@ -24,6 +24,10 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   closed: one that reads a key the event does not carry refuses the event and counts it (`missing`). The library holds
   no rule; the plan's `RunSink` base is this view and this gate (a driver may not subclass another driver: the tree's
   layers).
+- **A mask per subscription** (TODO_recall 6): `bus.subscribe(sink, redact=…)` masks what that sink receives (payload
+  and declared words), on the sink's own worker. `Tracker(redact=…)` stays the mask every sink inherits; a tracker with
+  none and a mask per subscription is how one sink receives clear text while the others never do. Breaking for a
+  custom bus: `BusPort.subscribe` takes the keyword `redact`.
 
 ### Fixed
 

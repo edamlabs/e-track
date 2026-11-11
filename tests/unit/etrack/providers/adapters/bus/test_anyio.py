@@ -92,6 +92,20 @@ async def test_anyio_select_transforms(recording: RecordingSink) -> None:
     assert recording.views[0].name == "renamed"  # ty: ignore[unresolved-attribute]
 
 
+async def test_anyio_redact_per_sink(recording: RecordingSink) -> None:
+    clear = RecordingSink()
+
+    def mask(payload: dict[str, object]) -> dict[str, object]:
+        return dict.fromkeys(payload, "***")
+
+    async with AnyioAdapter() as bus:
+        bus.subscribe(recording, redact=mask)
+        bus.subscribe(clear)
+        bus.publish(frame(payload={"said": "mi DNI"}, output="hola"))
+    assert (recording.views[0].payload, recording.views[0].output) == ({"said": "***"}, "***")  # ty: ignore[unresolved-attribute]
+    assert (clear.views[0].payload, clear.views[0].output) == ({"said": "mi DNI"}, "hola")  # ty: ignore[unresolved-attribute]
+
+
 async def test_anyio_foreign_thread(recording: RecordingSink) -> None:
     async with AnyioAdapter() as bus:
         bus.subscribe(recording)
