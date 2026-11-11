@@ -28,6 +28,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   and declared words), on the sink's own worker. `Tracker(redact=…)` stays the mask every sink inherits; a tracker with
   none and a mask per subscription is how one sink receives clear text while the others never do. Breaking for a
   custom bus: `BusPort.subscribe` takes the keyword `redact`.
+- **`HttpDriver` tells its refusals apart** (TODO_recall 7): a network error, 408, 425, 429 or 5xx is retried with the
+  doubling backoff; any other refusal is final, and a batch refused for good is sent again item by item, so one bad
+  item costs one item. What is refused in the end goes to the `refused(items, refusal)` hook (`Refusal`: status, the
+  server's reason, `final`) — a warning by default — and is no longer raised from `flush`: a subclass that overrode
+  `flush` to swallow `SinkError` can drop the override. `HttpDriver(signer=…)` takes the host's own `SignerPort`
+  (`async headers()`) instead of the configured `auth`, with no private attribute touched.
 
 ### Fixed
 

@@ -2,8 +2,10 @@
 
 The bus already gives every sink its own worker, a bounded queue and a `select`: this driver adds what a remote system
 needs. Events gather in a batch that leaves when it is full or when the oldest has waited `flush`; a request that
-meets a network error, a 429 or a 5xx is retried with a doubling backoff, any other refusal is not; every request is
-signed by the configured `Auth`. Leaving the driver sends what is left.
+meets a network error, a 408, 425, 429 or a 5xx is retried with a doubling backoff, any other refusal is final; a batch
+refused for good is sent again item by item, so one bad item costs one item. What is refused in the end is handed to
+`refused` with the server's reason — never raised in the bus's way. Every request is signed by the configured `Auth`, or
+by the host's own `SignerPort`. Leaving the driver sends what is left.
 
 A custom driver subclasses it and overrides what it must, nothing else:
 
@@ -13,7 +15,8 @@ A custom driver subclasses it and overrides what it must, nothing else:
   key the event does not carry (`view.attributes["app.owner"]`) refuses the event and counts it (`missing`), so a
   missing fact never passes as a default;
 - `encode(view)` — the item the event becomes (a `msgspec.Struct`, a dict, anything msgspec encodes);
-- `body(items)` — the request body and its content type, when the endpoint wants a shape of its own."""
+- `body(items)` — the request body and its content type, when the endpoint wants a shape of its own;
+- `refused(items, refusal)` — what to do with items the endpoint did not take: by default, a warning."""
 
 import asyncio
 from types import MappingProxyType
@@ -29,6 +32,7 @@ from etrack.infra.errors import SinkError
 from etrack.infra.logger import logger
 from etrack.models.event import EventPhase, EventView, RunEvent
 from etrack.ports.provider import Isolation, Locality, ProviderSpec, Workload
+from etrack.ports.sink import Refusal, SignerPort
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -38,8 +42,9 @@ if TYPE_CHECKING:
 PHASES: Final[frozenset[EventPhase]] = frozenset(
     {EventPhase.START, EventPhase.END, EventPhase.ERROR, EventPhase.INSTANT}
 )
-### the refusals worth another attempt: too many requests, and the server's own failures.
+### the refusals worth another attempt: a timeout, too early, too many requests, and the server's own failures.
 RETRIED: Final[frozenset[int]] = frozenset({408, 425, 429, 500, 502, 503, 504})
+REASON: Final[int] = 200
 
 
 def body_json(items: Sequence[Any]) -> tuple[bytes, str]:
@@ -64,15 +69,28 @@ class HttpDriver:
     view: ClassVar[type[EventView]] = RunEvent
     phases: ClassVar[frozenset[EventPhase]] = PHASES
 
-    __slots__ = ("_batch", "_client", "_conf", "_failed", "_lock", "_missing", "_sent", "_signer", "_ticker")
+    __slots__ = (
+        "_batch",
+        "_client",
+        "_conf",
+        "_failed",
+        "_given",
+        "_lock",
+        "_missing",
+        "_sent",
+        "_signer",
+        "_ticker",
+    )
 
-    def __init__(self, **given: Unpack[HttpConfig]) -> None:
-        """Keyword arguments as `HttpConfig` names them; what is not given, ETRACK_HTTP_* fills (`infra/defaults`)."""
+    def __init__(self, *, signer: SignerPort | None = None, **given: Unpack[HttpConfig]) -> None:
+        """Keyword arguments as `HttpConfig` names them; what is not given, ETRACK_HTTP_* fills (`infra/defaults`).
+        `signer`, when given, signs every request instead of the configured `auth`."""
         self._conf = defaults.http(**given)
+        self._given = signer
         self._batch: list[Any] = []
         self._lock = asyncio.Lock()
         self._client: httpx.AsyncClient | None = None
-        self._signer: AuthSigner | None = None
+        self._signer: SignerPort | None = None
         self._ticker: asyncio.Task[None] | None = None
         self._sent = 0
         self._failed = 0
@@ -80,9 +98,9 @@ class HttpDriver:
 
     ##### PRIVATE #####
 
-    def _common_client(self) -> tuple[httpx.AsyncClient, AuthSigner]:
+    def _common_client(self) -> tuple[httpx.AsyncClient, SignerPort]:
         match self._client, self._signer:
-            case httpx.AsyncClient() as client, AuthSigner() as signer:
+            case httpx.AsyncClient() as client, SignerPort() as signer:
                 return client, signer
             case _:
                 msg = f"{type(self).__name__} is not open: the lifespan opens it before the bus delivers"
@@ -93,12 +111,21 @@ class HttpDriver:
         wait = self._conf["flush"].total_seconds()
         while True:
             await asyncio.sleep(wait)
-            try:
-                await self.flush()
-            except SinkError as failure:
-                logger.warning("http flush failed", sink=self.spec.name, error=failure.message)
+            await self.flush()
 
-    async def _flush_post(self, content: bytes, kind: str, attempt: int = 0) -> None:
+    async def _flush_items(self, items: list[Any]) -> None:
+        content, kind = self.body(items)
+        match await self._flush_post(content, kind):
+            case None:
+                self._sent += len(items)
+            case Refusal(final=True) if len(items) > 1:
+                ### one bad item must not sink its batch: a final refusal is tried again item by item.
+                _ = [await self._flush_items([item]) for item in items]
+            case refusal:
+                self._failed += len(items)
+                self.refused(items, refusal)
+
+    async def _flush_post(self, content: bytes, kind: str, attempt: int = 0) -> Refusal | None:
         config = self._conf
         client, signer = self._common_client()
         headers = {
@@ -108,20 +135,18 @@ class HttpDriver:
         }
         try:
             reply = await client.request(config["method"], config["endpoint"], content=content, headers=headers)
-            status, reason = reply.status_code, f"{reply.status_code} {reply.text[:200]}"
+            status, reason = reply.status_code, f"{reply.status_code} {reply.text[:REASON]}"
         except httpx.TransportError as failure:
             status, reason = 0, f"{type(failure).__name__}: {failure}"
-        match status:
-            case ok if 200 <= ok < 300:  # noqa: PLR2004 — the 2xx class
-                return
-            case again if (again == 0 or again in RETRIED) and attempt < config["retries"]:
+        again = status == 0 or status in RETRIED
+        match (status, again):
+            case (ok, _) if 200 <= ok < 300:  # noqa: PLR2004 — the 2xx class
+                return None
+            case (_, True) if attempt < config["retries"]:
                 await asyncio.sleep(config["backoff"].total_seconds() * 2**attempt)
-                await self._flush_post(content, kind, attempt + 1)
+                return await self._flush_post(content, kind, attempt + 1)
             case _:
-                msg = (
-                    f"{self.spec.name}: {config['endpoint']} refused the batch after {attempt + 1} attempts — {reason}"
-                )
-                raise SinkError(msg)
+                return Refusal(status=status, reason=f"after {attempt + 1} attempts — {reason}", final=not again)
 
     def _send_accept(self, view: EventView) -> bool:
         try:
@@ -148,11 +173,23 @@ class HttpDriver:
         """The request body and its content type: by default, the configured encoding."""
         return BODIES[self._conf["encoding"]](items)
 
+    def refused(self, items: Sequence[Any], refusal: Refusal) -> None:
+        """Items the endpoint did not take, and why: by default, a warning with the server's reason."""
+        logger.warning(
+            "http refused",
+            sink=self.spec.name,
+            endpoint=self._conf["endpoint"],
+            items=len(items),
+            status=refusal.status,
+            final=refusal.final,
+            reason=refusal.reason,
+        )
+
     ##### PUBLIC #####
 
     async def __aenter__(self) -> Self:
         config = self._conf
-        self._signer = await AuthSigner(config["auth"]).ready()
+        self._signer = self._given or await AuthSigner(config["auth"]).ready()
         self._client = httpx.AsyncClient(timeout=config["timeout"].total_seconds())
         self._ticker = asyncio.create_task(self._enter_tick())
         logger.info("http opened", sink=self.spec.name, endpoint=config["endpoint"], batch=config["batch"])
@@ -183,21 +220,12 @@ class HttpDriver:
         _ = len(self._batch) >= self._conf["batch"] and await self.flush()
 
     async def flush(self) -> int:
-        """Send what is batched now; how many events left. A refusal drops the batch and raises."""
+        """Send what is batched now; how many events were taken. What is refused goes to `refused`, never raised."""
         async with self._lock:
             items, self._batch = self._batch, []
-            match items:
-                case []:
-                    return 0
-                case _:
-                    content, kind = self.body(items)
-                    try:
-                        await self._flush_post(content, kind)
-                    except SinkError:
-                        self._failed += len(items)
-                        raise
-                    self._sent += len(items)
-                    return len(items)
+            before = self._sent
+            _ = items and await self._flush_items(items)
+            return self._sent - before
 
     @property
     def sent(self) -> int:
@@ -206,7 +234,7 @@ class HttpDriver:
 
     @property
     def failed(self) -> int:
-        """Events dropped with a refused batch."""
+        """Events the endpoint did not take, in the end."""
         return self._failed
 
     @property
