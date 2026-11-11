@@ -83,7 +83,8 @@ async def test_outbox_one_bad_item_dead_rest_delivered(tmp_path: Path, httpserve
 
 
 async def test_outbox_deadline_then_requeue(tmp_path: Path, httpserver: HTTPServer) -> None:
-    endpoint = fake_endpoint(httpserver, 503, 503, 503)
+    ### refused until the item is dead, whatever the clock's granularity; the endpoint takes it once requeued.
+    endpoint = fake_endpoint(httpserver, *[503] * 1000)
     config = fast(endpoint.url, deadline=timedelta(milliseconds=100))
     async with SqliteAdapter(tmp_path / "o.db") as outbox, Keeping(outbox=outbox, **config) as driver:
         await driver.send(ended(0))
@@ -93,6 +94,7 @@ async def test_outbox_deadline_then_requeue(tmp_path: Path, httpserver: HTTPServ
         assert dead is not None
         assert dead.state is EntryState.DEAD
         assert "past its deadline" in driver.refusals[0].reason
+        endpoint.statuses.clear()
         assert await outbox.requeue(key)
         await eventually(lambda: driver.sent == 1)
         assert await outbox.of(key) is None
@@ -127,8 +129,11 @@ async def test_outbox_killed_host_loses_nothing(tmp_path: Path, httpserver: HTTP
     db, count = tmp_path / "o.db", 100
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
     down = f"http://127.0.0.1:{free_port()}{PATH}"
+    ### the base interpreter, not the venv's: on Windows the venv's python.exe is a launcher whose child would outlive
+    ### the kill and keep the file open; PYTHONPATH carries the venv's packages either way.
+    python = getattr(sys, "_base_executable", sys.executable)
     host = await asyncio.create_subprocess_exec(
-        sys.executable, str(RELAY), str(db), down, str(count), stdout=subprocess.PIPE, env=env
+        python, str(RELAY), str(db), down, str(count), stdout=subprocess.PIPE, env=env
     )
     assert host.stdout is not None
     ### the host's log shares its stdout: read until it says everything is stored.
