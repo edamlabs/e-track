@@ -80,6 +80,11 @@ class Canvas:
         """The text of one part (`counts`, `title`, `kind`…) of a drawn node."""
         return await self._page.locator(f'.react-flow__node[data-id="{node}"] .{part}').first.inner_text()
 
+    async def classes(self, node: str) -> frozenset[str]:
+        """The classes a drawn node's stage wears: its status (`done`, `idle`…), `last`, its family."""
+        stage = self._page.locator(f'.react-flow__node[data-id="{node}"] .stage')
+        return frozenset(str(await stage.get_attribute("class")).split())
+
     async def border(self, node: str) -> str:
         """The computed colour of a node's border: its family."""
         stage = self._page.locator(f'.react-flow__node[data-id="{node}"] .stage')

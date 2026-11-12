@@ -67,6 +67,22 @@ export function layout(topology: Topology): { nodes: Node<StageData>[]; edges: E
   return { nodes, edges };
 }
 
+// Which declared node a node span is: by its mount path — the subgraph nodes it runs under, task ids dropped, then its
+// name (`first:work`), as the topology names a subgraph's inner node — else by its name alone. One subgraph mounted
+// twice has two nodes of one name: only the path tells them apart.
+export function placer(topology: Topology): (span: Span) => string | undefined {
+  const ids = new Set(topology.nodes.map((node) => node.id));
+  const byName = new Map(topology.nodes.map((node) => [node.name, node.id]));
+  return (span) => {
+    const mount = span.ns
+      .split("|")
+      .filter(Boolean)
+      .map((segment) => segment.split(":")[0]);
+    const path = [...mount, span.name].join(":");
+    return ids.has(path) ? path : byName.get(span.name);
+  };
+}
+
 // The declared graph's own node visits in this run, oldest first: a subagent's inner nodes are its own graph's.
 function visits(spans: Map<string, Span>): Span[] {
   return [...spans.values()].filter((span) => span.kind === "node" && outer(spans, span)).sort((a, b) => a.seq - b.seq);
@@ -74,12 +90,12 @@ function visits(spans: Map<string, Span>): Span[] {
 
 // Every declared node's activity in this run, by node id; the node that ran last is marked.
 export function activity(topology: Topology, spans: Map<string, Span>): Map<string, Activity> {
-  const ids = new Map(topology.nodes.map((node) => [node.name, node.id]));
+  const place = placer(topology);
   const seen = visits(spans);
   const latest = seen[seen.length - 1];
   const found = new Map<string, Activity>();
   for (const span of seen) {
-    const id = ids.get(span.name);
+    const id = place(span);
     if (!id) continue;
     const before = found.get(id) ?? IDLE;
     found.set(id, { ...before, status: span.status, visits: before.visits + 1, last: span === latest });
@@ -87,7 +103,8 @@ export function activity(topology: Topology, spans: Map<string, Span>): Map<stri
   const counted = new Map<string, Map<string, number>>();
   for (const span of [...spans.values()].sort((a, b) => a.seq - b.seq)) {
     if (!CALL_KINDS.has(span.kind)) continue;
-    const id = ids.get(hostNode(spans, span)?.name ?? "");
+    const host = hostNode(spans, span);
+    const id = host ? place(host) : undefined;
     const mine = id ? found.get(id) : undefined;
     if (!id || !mine) continue;
     const kinds = counted.get(id) ?? new Map<string, number>();
@@ -105,8 +122,7 @@ export function activity(topology: Topology, spans: Map<string, Span>): Map<stri
 // The arcs this run walked: each visit is reached by the arc from the predecessor that ran most recently before it
 // (an entry arc when no predecessor ran yet); the arc into the newest visit is the last one walked.
 export function trail(topology: Topology, spans: Map<string, Span>): Trail {
-  const byName = new Map(topology.nodes.map((node) => [node.name, node.id]));
-  const names = new Map(topology.nodes.map((node) => [node.id, node.name]));
+  const place = placer(topology);
   const entries = new Set(topology.nodes.filter((node) => node.entry).map((node) => node.id));
   const into = new Map<string, Topology["edges"]>();
   for (const edge of topology.edges) into.set(edge.target, [...(into.get(edge.target) ?? []), edge]);
@@ -114,18 +130,18 @@ export function trail(topology: Topology, spans: Map<string, Span>): Trail {
   const walked = new Set<string>();
   let last = "";
   for (const span of visits(spans)) {
-    const target = byName.get(span.name);
+    const target = place(span);
     if (!target) continue;
     let best: { id: string; seq: number } | null = null;
     for (const arc of into.get(target) ?? []) {
-      const from = entries.has(arc.source) ? -1 : newest.get(names.get(arc.source) ?? "");
+      const from = entries.has(arc.source) ? -1 : newest.get(arc.source);
       if (from !== undefined && (!best || from > best.seq)) best = { id: arc.id, seq: from };
     }
     if (best) {
       walked.add(best.id);
       last = best.id;
     }
-    newest.set(span.name, span.seq);
+    newest.set(target, span.seq);
   }
   return { walked, last };
 }

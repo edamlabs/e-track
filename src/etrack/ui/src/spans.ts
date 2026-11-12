@@ -7,6 +7,7 @@ export interface Span {
   parent: string;
   kind: EventKind;
   name: string;
+  ns: string;
   status: Status;
   seq: number;
   latency: number | null;
@@ -26,6 +27,7 @@ function opened(event: RunEvent): Span {
     parent: event.parent ?? "",
     kind: event.kind,
     name: event.name || event.kind,
+    ns: event.ns ?? "",
     status: event.phase === "start" ? "running" : (CLOSED[event.phase] ?? "done"),
     seq: event.seq,
     latency: null,

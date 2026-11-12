@@ -10,6 +10,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
   routing by `Command` without `destinations=` or a `Command[Literal[...]]` annotation is drawn by LangGraph to
   `__end__`, its targets left unreached — probed 2026-11-12; documented in *Graphs, labels and kinds*.
 
+### Fixed
+
+- The viewer lights the right mount of a subgraph mounted twice: a live node is placed by its mount path (`ns` without
+  task ids, then its name: `first:work`), as the topology names it, and only then by its name. Before, both mounts'
+  visits lit the last node of that name and the first never lit — seen in chromium (`test_mounts`), 2026-11-12.
+
 ## [0.6.0] — 2026-11-11
 
 ### Added
