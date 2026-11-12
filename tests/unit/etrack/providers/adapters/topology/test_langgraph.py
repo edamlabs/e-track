@@ -1,10 +1,12 @@
 """tests/unit/etrack/providers/adapters/topology/langgraph: a compiled graph read as nodes and arcs, deep agents included."""
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from deepagents import create_deep_agent
 from langgraph.graph import END, START, MessagesState
+from langgraph.types import Command
+from structlog.testing import capture_logs
 
 from etrack.infra.errors import SourceError
 from etrack.models.event import EventKind
@@ -105,3 +107,29 @@ async def test_langgraph_rejects_unknown_kind() -> None:
     graph.add_edge("odd", END)
     with pytest.raises(SourceError, match="node kind 'robot'"):
         LanggraphTopologyAdapter().read(graph.compile())
+
+
+def _routed(*, declared: bool) -> Any:
+    def route(state: MessagesState) -> Command[Literal["a", "b"]]:
+        return Command[Literal["a", "b"]](goto="b")
+
+    def undeclared(state: MessagesState) -> Command[Any]:
+        return Command(goto="b")
+
+    graph = state_graph(MessagesState)
+    graph.add_node("route", route if declared else undeclared)
+    graph.add_node("a", lambda state: {})
+    graph.add_node("b", lambda state: {})
+    graph.add_edge(START, "route")
+    graph.add_edge("a", END)
+    graph.add_edge("b", END)
+    return graph.compile()
+
+
+@pytest.mark.parametrize(("declared", "unreached"), [(True, []), (False, [["a", "b"]])], ids=["declared", "undeclared"])
+async def test_langgraph_command_destinations(declared: bool, unreached: list[list[str]]) -> None:
+    with capture_logs() as lines:
+        topology = LanggraphTopologyAdapter().read(_routed(declared=declared))
+    arcs = {(edge.source, edge.target) for edge in topology.edges}
+    assert ({("route", "a"), ("route", "b")} <= arcs) is declared
+    assert [line["nodes"] for line in lines if line["event"] == "topology nodes unreached"] == unreached

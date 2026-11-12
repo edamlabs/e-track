@@ -47,6 +47,21 @@ topology = Topology(
 A subagent launched through a tool is not declared anywhere: it is counted inside the node that launched it, and
 shown whole in the span tree.
 
+### A node that routes by `Command`
+
+A node that returns `Command(goto=…)` must say where it may go, or LangGraph cannot draw it: it draws the node to
+`__end__` and leaves its targets with no arc in. Declare the destinations — either way works:
+
+```python
+graph.add_node("route", route, destinations=("refund", "escalate"))
+
+
+def route(state: State) -> Command[Literal["refund", "escalate"]]: ...
+```
+
+A map with nodes no arc reaches logs `topology nodes unreached` with their names. The run's frames are right either
+way: a node's END carries the `goto` it returned.
+
 ## Labels — names for people
 
 A node's `name` is what its spans carry: `PatchToolCallsMiddleware.before_agent`, `tools`. It ties the node to its

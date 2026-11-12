@@ -4,6 +4,23 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-11-12
+
+### Added
+
+- The topology names the nodes no declared arc reaches (`topology nodes unreached`, a warning with the remedy): a node
+  routing by `Command` without `destinations=` or a `Command[Literal[...]]` annotation is drawn by LangGraph to
+  `__end__`, its targets left unreached — probed 2026-11-12; documented in *Graphs, labels and kinds*.
+
+### Fixed
+
+- The viewer lights the right mount of a subgraph mounted twice: a live node is placed by its mount path (`ns` without
+  task ids, then its name: `first:work`), as the topology names it, and only then by its name. Before, both mounts'
+  visits lit the last node of that name and the first never lit — seen in chromium (`test_mounts`), 2026-11-12.
+- Phoenix 21 reads 0.6's run-level keys as written (`test_declared`, sandbox): the declared words on the root span
+  (`input.value`, `output.value`, `gen_ai.*.messages`), `etrack.outcome`, the totals under `etrack.usage.*`, and token
+  counts only on the model calls. Langfuse is not in the sandbox: not verified.
+
 ## [0.6.0] — 2026-11-11
 
 ### Added
