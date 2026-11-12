@@ -4,6 +4,12 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- The topology names the nodes no declared arc reaches (`topology nodes unreached`, a warning with the remedy): a node
+  routing by `Command` without `destinations=` or a `Command[Literal[...]]` annotation is drawn by LangGraph to
+  `__end__`, its targets left unreached — probed 2026-11-12; documented in *Graphs, labels and kinds*.
+
 ## [0.6.0] — 2026-11-11
 
 ### Added

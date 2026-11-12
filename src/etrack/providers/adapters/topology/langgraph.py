@@ -5,7 +5,11 @@ exported in, so a host that cannot hand over the graph object (another process, 
 graph, `get_graph(xray=True)` opens compiled subgraphs into their own nodes (`agent:model`), so a deep agent mounted as
 a node shows its inner steps. `__start__` and `__end__` stay as nodes: a canvas draws where a run enters and leaves. A
 subagent a deep agent launches through a tool is not declared anywhere — it appears only in the live span tree. A node
-declared with `metadata={"label": …}` carries that label: what a person reads on the canvas, the name left intact."""
+declared with `metadata={"label": …}` carries that label: what a person reads on the canvas, the name left intact.
+
+A node that routes by returning `Command` declares nothing LangGraph can draw unless it says where it may go
+(`destinations=` on `add_node`, or a `Command[Literal[...]]` return annotation): LangGraph then draws it to `__end__`
+and leaves its targets unreached. The map cannot be guessed; the nodes no arc reaches are named in a warning instead."""
 
 from typing import Any, ClassVar, Final, Self
 
@@ -144,6 +148,17 @@ class LanggraphTopologyAdapter:
         )
         return Topology(nodes=nodes, edges=self._read_arcs(drawn.edges))
 
+    @staticmethod
+    def _read_unreached(topology: Topology) -> None:
+        reached = {edge.target for edge in topology.edges}
+        unreached = sorted(node.id for node in topology.nodes if not node.entry and node.id not in reached)
+        _ = unreached and logger.warning(
+            "topology nodes unreached",
+            source="langgraph",
+            nodes=unreached,
+            remedy="a node routing by Command declares where it goes: destinations=… or Command[Literal[...]]",
+        )
+
     ############################################################
 
     ##### PUBLIC #####
@@ -161,9 +176,11 @@ class LanggraphTopologyAdapter:
 
     def read(self, graph: object) -> Topology:
         """The declared nodes and arcs, unplaced, from a compiled graph or the JSON of its `Graph.to_json()`; an arc's
-        label is the router's branch name when it has one."""
+        label is the router's branch name when it has one; the nodes no arc reaches are named in a warning."""
         match graph:
             case dict() as exported:
-                return self._read_json(exported)
+                topology = self._read_json(exported)
             case _:
-                return self._read_compiled(graph)
+                topology = self._read_compiled(graph)
+        self._read_unreached(topology)
+        return topology
