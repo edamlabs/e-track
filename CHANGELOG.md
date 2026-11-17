@@ -4,6 +4,7 @@ All notable changes to e-track are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+- CI runs on Linux only: macOS and Windows dropped (Damien, 17/11 — the stack runs on Linux).
 ## [0.6.1] — 2026-11-12
 
 ### Added
